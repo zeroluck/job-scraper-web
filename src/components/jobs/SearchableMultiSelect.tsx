@@ -11,6 +11,8 @@ interface SearchableMultiSelectProps {
   placeholder?: string;
 }
 
+const OPTIONS_LIMIT = 100;
+
 function validOptions(payload: unknown): string[] {
   const candidate =
     Array.isArray(payload)
@@ -48,7 +50,7 @@ export default function SearchableMultiSelect({
           result = await fetchOptions(query, controller.signal);
         } else if (endpoint) {
           const response = await fetch(
-            `${endpoint}?q=${encodeURIComponent(query)}&limit=5000`,
+            `${endpoint}?q=${encodeURIComponent(query)}&limit=${OPTIONS_LIMIT}`,
             { signal: controller.signal }
           );
           if (!response.ok) {
