@@ -108,7 +108,7 @@ export default function CustomPdfViewer({
     router.push(`${window.location.pathname}/edit${query}`);
   };
 
-  const onClose = () => {
+  const onClose = useCallback(() => {
     const source = searchParams.get("source");
     if (source) {
       // Return to the source page (e.g. /jobs/top-matches or /jobs/new) with search params preserved
@@ -121,7 +121,7 @@ export default function CustomPdfViewer({
     } else {
       router.back();
     }
-  };
+  }, [jobId, router, searchParams]);
 
   const handleDownload = () => {
     if (effectiveFileUrl) {

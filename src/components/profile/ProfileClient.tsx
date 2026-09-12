@@ -2,14 +2,9 @@
 
 import {
   Resume,
-  Education,
-  Experience,
-  Project,
-  Certification,
   Links,
 } from "@/types";
 import {
-  User,
   Mail,
   Phone,
   MapPin,
@@ -25,14 +20,10 @@ import {
   Save,
   X,
   Download,
-  Plus,
-  Trash2,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
   Sparkles,
 } from "lucide-react";
-import { useState, useEffect, ChangeEvent } from "react";
+import { useState } from "react";
 
 interface ProfileClientProps {
   initialData: Resume;
@@ -116,6 +107,11 @@ export default function ProfileClient({ initialData }: ProfileClientProps) {
         resume_link,
         ...cleanData
       } = formData;
+      void id;
+      void created_at;
+      void parsed_at;
+      void last_updated;
+      void resume_link;
 
       const response = await fetch("/api/base-resume", {
         method: "PATCH",
@@ -152,6 +148,11 @@ export default function ProfileClient({ initialData }: ProfileClientProps) {
         resume_link,
         ...cleanData
       } = formData;
+      void id;
+      void created_at;
+      void parsed_at;
+      void last_updated;
+      void resume_link;
 
       const response = await fetch("/api/generate-resume", {
         method: "POST",

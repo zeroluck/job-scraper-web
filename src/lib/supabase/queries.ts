@@ -836,7 +836,10 @@ export async function executeKeywordInsightsQuery(
 
   const parsedTotal = Number(rows[0]?.total_count);
   const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
-  const keywords = rows.map(({ total_count: _totalCount, ...row }) => row);
+  const keywords = rows.map(({ total_count, ...row }) => {
+    void total_count;
+    return row;
+  });
   return { keywords, totalCount };
 }
 

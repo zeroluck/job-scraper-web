@@ -371,7 +371,7 @@ test("Boolean lane search forwards memberships for exact count and deep-page lis
   };
   const mock = createQueryClient({
     data: [hydrated],
-    rpc: (name, params) => {
+    rpc: (name) => {
       if (name === "search_job_ids_v1") {
         return [{ job_id: "job-501", total_count: 777, row_number: 501 }];
       }

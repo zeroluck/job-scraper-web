@@ -158,8 +158,7 @@ function drawTwoColumnRow(
   rightSize: number,
   rightColor: string,
   leftWidth: number,
-  rightWidth: number,
-  leftIsBold?: boolean
+  rightWidth: number
 ) {
   ensureSpace(doc, 20);
   const startY = doc.y;

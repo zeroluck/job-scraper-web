@@ -2,14 +2,10 @@
 
 import {
   Resume,
-  Education,
-  Experience,
-  Project,
-  Certification,
   Links,
 } from "@/types";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, Save, X, FileText } from "lucide-react";
 import { Toast } from "./ResumeFormUI";
 import { ResumeFormFields } from "./ResumeFormFields";
@@ -87,6 +83,10 @@ export default function ResumeEditClient({
       resume_link,
       ...cleanedResumeDataForPdf
     } = resumeDataForPdf;
+    void created_at;
+    void parsed_at;
+    void last_updated;
+    void resume_link;
 
     try {
       // Generate PDF using local API route
@@ -146,6 +146,8 @@ export default function ResumeEditClient({
     setToast(null);
 
     const { id, created_at, parsed_at, ...updateData } = formData;
+    void created_at;
+    void parsed_at;
     const finalUpdateData = { ...updateData };
 
     // Parse JSON strings to objects if necessary
@@ -168,7 +170,7 @@ export default function ResumeEditClient({
             (finalUpdateData as any)[key] = JSON.parse(
               finalUpdateData[key] as string,
             );
-          } catch (e) {
+          } catch {
             // Ignore parse errors, keep as string
           }
         }

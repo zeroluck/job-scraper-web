@@ -50,7 +50,7 @@ export default async function NewJobsPage({
             <FilterButton supportedFilters={SUPPORTED_FILTERS} />
             <SortOptions supportedSorts={SUPPORTED_SORTS} />
           </Suspense>
-          <RefreshButton currentPage={currentPage} />
+          <RefreshButton />
         </div>
       </div>
 

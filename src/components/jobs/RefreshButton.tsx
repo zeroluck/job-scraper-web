@@ -4,11 +4,7 @@ import { RefreshCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function RefreshButton({
-  currentPage,
-}: {
-  currentPage: number;
-}) {
+export default function RefreshButton() {
   const router = useRouter();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
