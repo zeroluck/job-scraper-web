@@ -210,6 +210,7 @@ test("rejects malformed scalar values and unknown enums", () => {
     locationScope: undefined,
     excludeMetro: undefined,
     category: undefined,
+    keyword: undefined,
     query: undefined,
     sortBy: undefined,
     sortOrder: undefined,

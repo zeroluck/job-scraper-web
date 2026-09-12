@@ -87,3 +87,16 @@ test("repeated values survive and page/selectedJobId removed", () => {
   assert.equal(next.get("page"), null);
   assert.equal(next.get("selectedJobId"), null);
 });
+
+test("keyword stays within Insights and never leaks to job lists", () => {
+  const source = params([
+    ["keyword", " Python "],
+    ["page", "4"],
+    ["selectedJobId", "job-1"],
+  ]);
+  const insights = buildRouteSearchParams(source, "/insights");
+  assert.equal(insights.get("keyword"), "Python");
+  assert.equal(insights.get("page"), null);
+  assert.equal(insights.get("selectedJobId"), null);
+  assert.equal(buildRouteSearchParams(source, "/jobs/all").get("keyword"), null);
+});

@@ -3,10 +3,11 @@ import { Suspense } from "react";
 import InsightsClient from "@/components/insights/InsightsClient";
 import FilterButton from "@/components/jobs/FilterButton";
 import FilterChips from "@/components/jobs/FilterChips";
+import { parsePageParam } from "@/lib/filters/pageParam";
 import { parseFilterSearchParams } from "@/lib/filters/searchParams";
 import { ROUTE_FILTERS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
 import { getCachedKeywordInsights } from "@/lib/supabase/cachedKeywordInsights";
-import { INSIGHTS_KEYWORD_LIMIT } from "@/lib/supabase/queries";
+import { getKeywordJobs, INSIGHTS_KEYWORD_LIMIT } from "@/lib/supabase/queries";
 import { CANONICAL_ARCHETYPES, archetypeLabel } from "@/lib/archetypes/registry";
 
 const INSIGHTS_FILTERS = ROUTE_FILTERS["/insights"];
@@ -74,20 +75,49 @@ async function InsightsResults({
   scopeLabel,
   activeCategory,
   queryOptions,
+  selectedKeyword,
+  keywordPage,
+  keywordPageSize,
 }: {
   filtersKey: string;
   scopeLabel: string;
   activeCategory: "all" | "skill" | "technology" | "certification" | "attribute";
   queryOptions: Parameters<typeof getCachedKeywordInsights>[0];
+  selectedKeyword?: string;
+  keywordPage: number;
+  keywordPageSize: 10 | 25 | 100;
 }) {
   void filtersKey;
   let result: Awaited<ReturnType<typeof getCachedKeywordInsights>> | undefined;
   let errorMessage: string | undefined;
-  try {
-    result = await getCachedKeywordInsights(queryOptions);
-  } catch (error) {
+  let keywordResult: Awaited<ReturnType<typeof getKeywordJobs>> | undefined;
+  let keywordError: string | undefined;
+  const [insightsOutcome, keywordOutcome] = await Promise.allSettled([
+    getCachedKeywordInsights(queryOptions),
+    selectedKeyword
+      ? getKeywordJobs({
+        ...queryOptions,
+        keyword: selectedKeyword,
+        page: keywordPage,
+        pageSize: keywordPageSize,
+      })
+      : Promise.resolve(undefined),
+  ]);
+  if (insightsOutcome.status === "fulfilled") {
+    result = insightsOutcome.value;
+  } else {
     errorMessage =
-      error instanceof Error ? error.message : "Failed to load insights.";
+      insightsOutcome.reason instanceof Error
+        ? insightsOutcome.reason.message
+        : "Failed to load insights.";
+  }
+  if (keywordOutcome.status === "fulfilled") {
+    keywordResult = keywordOutcome.value;
+  } else {
+    keywordError =
+      keywordOutcome.reason instanceof Error
+        ? keywordOutcome.reason.message
+        : "Failed to load keyword jobs.";
   }
 
   if (!result) {
@@ -107,6 +137,12 @@ async function InsightsResults({
       limit={INSIGHTS_KEYWORD_LIMIT}
       lastUpdated={result.keywords[0]?.last_updated ?? null}
       activeCategory={activeCategory}
+      selectedKeyword={selectedKeyword}
+      keywordJobs={keywordResult?.jobs}
+      keywordTotalCount={keywordResult?.totalCount}
+      keywordPage={keywordPage}
+      keywordPageSize={keywordPageSize}
+      keywordError={keywordError}
     />
   );
 }
@@ -125,6 +161,9 @@ export default async function InsightsPage({
     ? filters.archetype
     : [...KNOWN_ARCHETYPES];
   const activeCategory = filters.category ?? "all";
+  const rawNavigation = parseFilterSearchParams(rawParams);
+  const keywordPage = parsePageParam(rawParams) ?? 1;
+  const keywordPageSize = rawNavigation.pageSize ?? 25;
   const scopeLabel = archetypes.map(archetypeLabel).join(", ");
   const queryOptions = {
     providers: filters.provider ? [filters.provider] : undefined,
@@ -140,7 +179,9 @@ export default async function InsightsPage({
     minCount: 2,
     limit: INSIGHTS_KEYWORD_LIMIT,
   };
-  const key = filterKey(rawParams);
+  const aggregateParams = { ...params };
+  delete aggregateParams.keyword;
+  const key = filterKey(aggregateParams);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -151,6 +192,9 @@ export default async function InsightsPage({
           scopeLabel={scopeLabel}
           activeCategory={activeCategory}
           queryOptions={queryOptions}
+          selectedKeyword={filters.keyword}
+          keywordPage={keywordPage}
+          keywordPageSize={keywordPageSize}
         />
       </Suspense>
     </div>

@@ -77,6 +77,11 @@ function text(input: SearchParamsInput, key: string): string | undefined {
   return value && value.length <= 500 ? value : undefined;
 }
 
+function keyword(input: SearchParamsInput): string | undefined {
+  const value = values(input, "keyword")[0]?.trim();
+  return value && value.length <= 200 ? value : undefined;
+}
+
 function textArray(input: SearchParamsInput, key: string): string[] | undefined {
   const result = Array.from(
     new Set(
@@ -190,6 +195,7 @@ export function parseFilterSearchParams(
     locationScope: enumArray(input, "locationScope", LOCATION_SCOPE_VALUES),
     excludeMetro: enumArray(input, "excludeMetro", METRO_VALUES),
     category: oneOf(input, "category", INSIGHTS_CATEGORY_VALUES),
+    keyword: keyword(input),
     query: text(input, "query"),
     sortBy: oneOf(input, "sortBy", SORT_FIELDS),
     sortOrder: oneOf(input, "sortOrder", SORT_ORDER_VALUES),

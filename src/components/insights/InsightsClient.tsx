@@ -1,5 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { resetResultPosition } from "@/lib/filters/searchParams";
@@ -7,69 +9,21 @@ import {
   INSIGHTS_CATEGORY_VALUES,
   type InsightsCategory,
 } from "@/lib/filters/types";
-import type { KeywordInsight } from "@/types";
+import type { JobListItem, KeywordInsight } from "@/types";
+import TopMatchesList from "@/components/jobs/TopMatchesList";
+import { CATEGORY_COLORS, CATEGORY_LABELS } from "./categoryColors";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  skill: "#1976D2",
-  technology: "#00897B",
-  certification: "#F57C00",
-  attribute: "#7B1FA2",
-};
-
-const CATEGORY_LABELS: Record<InsightsCategory, string> = {
-  all: "All",
-  skill: "Skills",
-  technology: "Technologies",
-  certification: "Certifications",
-  attribute: "Attributes",
-};
-
-function WordCloud({ keywords }: { keywords: KeywordInsight[] }) {
-  if (!keywords.length) {
-    return (
-      <div className="flex h-64 items-center justify-center text-gray-400">
-        No data available for this category.
-      </div>
-    );
-  }
-
-  const maxCount = Math.max(...keywords.map((k) => k.count));
-  const minCount = Math.min(...keywords.map((k) => k.count));
-
-  const fontSize = (count: number) => {
-    if (maxCount === minCount) return 24;
-    const normalized = (count - minCount) / (maxCount - minCount);
-    return Math.round(14 + normalized * 42);
-  };
-
-  const opacity = (count: number) => {
-    if (maxCount === minCount) return 1;
-    const normalized = (count - minCount) / (maxCount - minCount);
-    return 0.5 + normalized * 0.5;
-  };
-
-  return (
-    <div className="flex flex-wrap justify-center gap-3 p-6">
-      {keywords.map((k, index) => (
-        <span
-          key={`${k.category}:${k.keyword}:${index}`}
-          title={`${k.keyword} — ${k.count} job${k.count !== 1 ? "s" : ""}`}
-          style={{
-            fontSize: `${fontSize(k.count)}px`,
-            color: CATEGORY_COLORS[k.category] ?? "#555",
-            opacity: opacity(k.count),
-            lineHeight: 1.3,
-            cursor: "default",
-            transition: "opacity 0.2s",
-          }}
-          className="select-none hover:opacity-100"
-        >
-          {k.keyword}
-        </span>
-      ))}
+const WordCloudClient = dynamic(() => import("./WordCloudClient"), {
+  ssr: false,
+  loading: () => (
+    <div
+      aria-label="Loading word cloud"
+      className="flex h-64 items-center justify-center text-gray-400"
+    >
+      Loading word cloud…
     </div>
-  );
-}
+  ),
+});
 
 function Legend() {
   return (
@@ -115,6 +69,29 @@ function TopList({
   );
 }
 
+function KeywordChip({
+  keyword,
+  onRemove,
+}: {
+  keyword: string;
+  onRemove: () => void;
+}) {
+  const label = `Keyword: ${keyword}`;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className="rounded-full p-0.5 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <X className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
+
 type InsightsClientProps = {
   scopeLabel: string;
   keywords: KeywordInsight[];
@@ -123,6 +100,12 @@ type InsightsClientProps = {
   limit?: number;
   lastUpdated: string | null;
   activeCategory: InsightsCategory;
+  selectedKeyword?: string;
+  keywordJobs?: JobListItem[];
+  keywordTotalCount?: number;
+  keywordPage?: number;
+  keywordPageSize?: 10 | 25 | 100;
+  keywordError?: string;
 };
 
 export default function InsightsClient({
@@ -133,6 +116,12 @@ export default function InsightsClient({
   limit,
   lastUpdated,
   activeCategory,
+  selectedKeyword,
+  keywordJobs,
+  keywordTotalCount,
+  keywordPage = 1,
+  keywordPageSize = 25,
+  keywordError,
 }: InsightsClientProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -145,6 +134,36 @@ export default function InsightsClient({
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
+
+  const selectKeyword = (keyword: string, category: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("keyword", keyword);
+    // Ensure a concrete category so the drill-down list is scoped to the
+    // clicked word's category instead of every category at once.
+    if (
+      activeCategory === "all" &&
+      (INSIGHTS_CATEGORY_VALUES as readonly string[]).includes(category) &&
+      category !== "all"
+    ) {
+      next.set("category", category);
+    }
+    resetResultPosition(next);
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const clearKeyword = () => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("keyword");
+    resetResultPosition(next);
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const keywordTotalPages = Math.max(
+    1,
+    Math.ceil((keywordTotalCount ?? keywordJobs?.length ?? 0) / keywordPageSize),
+  );
 
   return (
     <div>
@@ -184,11 +203,47 @@ export default function InsightsClient({
         ))}
       </div>
 
+      {selectedKeyword && (
+        <section
+          aria-label={`Jobs mentioning ${selectedKeyword}`}
+          className="mb-8"
+        >
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold text-gray-800">
+              Jobs mentioning &ldquo;{selectedKeyword}&rdquo;
+              {keywordTotalCount !== undefined && (
+                <span className="ml-2 text-sm font-normal text-gray-600">
+                  {keywordTotalCount} {keywordTotalCount === 1 ? "job" : "jobs"}
+                </span>
+              )}
+            </h2>
+            <KeywordChip keyword={selectedKeyword} onRemove={clearKeyword} />
+          </div>
+          {keywordError ? (
+            <div className="flex h-32 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-6 text-center text-sm text-red-700">
+              {keywordError}
+            </div>
+          ) : keywordJobs?.length ? (
+            <TopMatchesList
+              jobs={keywordJobs}
+              currentPage={keywordPage}
+              totalPages={keywordTotalPages}
+              pageSize={keywordPageSize}
+              listTitle={`Jobs mentioning ${selectedKeyword}`}
+            />
+          ) : (
+            <div className="flex h-32 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-6 text-center text-sm text-gray-600">
+              No jobs mention this keyword under the current filters.
+            </div>
+          )}
+        </section>
+      )}
+
       {keywords.length ? (
         <>
           <div className="mb-8 min-h-64 rounded-xl border border-gray-200 bg-gray-50">
             {activeCategory === "all" && <Legend />}
-            <WordCloud keywords={keywords} />
+            <WordCloudClient keywords={keywords} onWordClick={selectKeyword} />
           </div>
 
           <div className="mb-4">

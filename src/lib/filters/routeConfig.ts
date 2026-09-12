@@ -138,7 +138,10 @@ export function buildRouteSearchParams(
       }
     }
   } else {
-    // destination is insights: preserve category only if valid.
+    // destination is insights: preserve category only if valid, and the
+    // drill-down keyword (trimmed, <=200 chars). keyword never travels to
+    // job-list routes: list destinations only copy allowlisted filter keys
+    // plus query/pageSize/sort above.
     const category = sourceValues(source, "category")[0];
     if (
       category &&
@@ -147,6 +150,10 @@ export function buildRouteSearchParams(
       )
     ) {
       next.set("category", category);
+    }
+    const keyword = sourceValues(source, "keyword")[0]?.trim();
+    if (keyword && keyword.length <= 200) {
+      next.set("keyword", keyword);
     }
   }
   return next;

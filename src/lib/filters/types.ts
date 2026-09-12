@@ -117,6 +117,7 @@ export interface FilterState<TArchetype extends string = BuiltInArchetype> {
   locationScope?: LocationScope[];
   excludeMetro?: MetroCode[];
   category?: InsightsCategory;
+  keyword?: string;
   query?: string;
   sortBy?: SortField;
   sortOrder?: SortOrder;

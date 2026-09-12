@@ -388,6 +388,7 @@ async function getMembershipProjections(
   jobIds: string[],
   kind: JobListKind,
   options: InternalJobListOptions,
+  projectionFilterStatus: string | null = options.filterStatus ?? null,
 ): Promise<Map<string, JobMembershipProjection>> {
   const projections = new Map<string, JobMembershipProjection>();
   const archetypes = options.archetype?.length
@@ -400,7 +401,7 @@ async function getMembershipProjections(
       p_job_ids: jobIds.slice(start, start + 500),
       p_archetypes: archetypes,
       p_kind: kind,
-      p_filter_status: options.filterStatus ?? null,
+      p_filter_status: projectionFilterStatus,
       p_min_score: scores.minScore ?? null,
       p_max_score: scores.maxScore ?? null,
     });
@@ -848,6 +849,108 @@ export async function getKeywordInsights(
 ): Promise<KeywordInsightsResult> {
   const supabase = await supabaseClientFactory();
   return executeKeywordInsightsQuery(supabase, options);
+}
+
+export interface KeywordJobsQueryOptions extends KeywordInsightsQueryOptions {
+  keyword: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface KeywordJobsResult {
+  jobs: JobListItem[];
+  totalCount: number;
+}
+
+function keywordJobsPage(options: KeywordJobsQueryOptions): {
+  keyword: string;
+  limit: number;
+  offset: number;
+} {
+  const keyword = options.keyword?.trim();
+  if (!keyword || keyword.length > 200) {
+    throw new Error("A keyword of 1-200 characters is required");
+  }
+  const page = safePositiveInteger(options.page, 1);
+  const requestedPageSize = Math.trunc(finiteNumber(options.pageSize) ?? 25);
+  const limit = Math.min(
+    Math.max(Number.isSafeInteger(requestedPageSize) ? requestedPageSize : 25, 1),
+    100,
+  );
+  return { keyword, limit, offset: (page - 1) * limit };
+}
+
+export async function executeKeywordJobsQuery(
+  supabase: any,
+  options: KeywordJobsQueryOptions,
+): Promise<{ jobIds: string[]; totalCount: number }> {
+  const { keyword, limit, offset } = keywordJobsPage(options);
+  const response = await supabase.rpc("get_keyword_job_ids", {
+    p_providers: arrayOption(options.providers, options.provider),
+    p_archetypes: compatibleArchetypeValues(
+      arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+    ),
+    p_levels: nonEmpty(options.levels),
+    p_filter_status: keywordFilterStatus(options.filterStatus),
+    p_companies: nonEmpty(options.companies),
+    p_job_titles: nonEmpty(options.jobTitles),
+    p_provinces: nonEmpty(options.provinces),
+    p_location_scopes: nonEmpty(options.locationScopes),
+    p_exclude_metros: nonEmpty(options.excludeMetros),
+    p_category: options.category && options.category !== "all" ? options.category : null,
+    p_keyword: keyword,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  const rows = ((await handleResponse(response)) ?? []) as Array<{
+    job_id: string | null;
+    total_count?: number | string | null;
+  }>;
+
+  const parsedTotal = Number(rows[0]?.total_count);
+  const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
+  const jobIds = rows.flatMap((row) =>
+    typeof row.job_id === "string" ? [row.job_id] : [],
+  );
+  return { jobIds, totalCount };
+}
+
+export async function getKeywordJobs(
+  options: KeywordJobsQueryOptions,
+): Promise<KeywordJobsResult> {
+  const supabase = await supabaseClientFactory();
+  const { jobIds, totalCount } = await executeKeywordJobsQuery(supabase, options);
+  if (!jobIds.length) return { jobs: [], totalCount };
+  const archetypes = compatibleArchetypeValues(
+    arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+  );
+  const memberships = await getMembershipProjections(
+    supabase,
+    jobIds,
+    "all",
+    { archetype: archetypes },
+    keywordFilterStatus(options.filterStatus),
+  );
+  const jobs: JobListItem[] = [];
+  for (let start = 0; start < jobIds.length; start += 500) {
+    const response = await supabase
+      .from("jobs")
+      .select(JOB_LIST_SELECT)
+      .in("job_id", jobIds.slice(start, start + 500));
+    for (const job of ((await handleResponse(response)) ?? []) as JobListItem[]) {
+      const membership = memberships.get(job.job_id);
+      // The keyword RPC and its projection use the same lane predicates.
+      // Missing projection state is therefore a consistency error, not a
+      // reason to leak jobs.* global technology-delivery state.
+      if (!membership) {
+        throw new Error(`Missing qualifying membership projection for job ${job.job_id}`);
+      }
+      jobs.push(overlayMembership(job, membership));
+    }
+  }
+  const rank = new Map(jobIds.map((jobId, index) => [jobId, index]));
+  jobs.sort((left, right) => rank.get(left.job_id)! - rank.get(right.job_id)!);
+  return { jobs, totalCount };
 }
 
 export async function getJobKeywordInsights(
