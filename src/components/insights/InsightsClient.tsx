@@ -119,6 +119,8 @@ type InsightsClientProps = {
   scopeLabel: string;
   keywords: KeywordInsight[];
   totalKeywords: number;
+  visualizedCount?: number;
+  limit?: number;
   lastUpdated: string | null;
   activeCategory: InsightsCategory;
 };
@@ -127,6 +129,8 @@ export default function InsightsClient({
   scopeLabel,
   keywords,
   totalKeywords,
+  visualizedCount,
+  limit,
   lastUpdated,
   activeCategory,
 }: InsightsClientProps) {
@@ -147,7 +151,13 @@ export default function InsightsClient({
       <div className="mb-6">
         <p className="text-sm text-gray-500">
           {scopeLabel} roles. Showing{" "}
-          <span className="font-medium text-gray-700">{totalKeywords} unique keywords</span>.
+          <span className="font-medium text-gray-700">{totalKeywords} unique keywords</span>
+          {visualizedCount !== undefined &&
+            limit !== undefined &&
+            totalKeywords > visualizedCount && (
+              <span>. Visualizing the top {visualizedCount}</span>
+            )}
+          .
           {lastUpdated && (
             <span className="ml-2 text-xs text-gray-400">
               Last updated {new Date(lastUpdated).toLocaleDateString()}

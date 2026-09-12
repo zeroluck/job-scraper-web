@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
@@ -15,6 +15,7 @@ import {
   type FilterId,
 } from "@/lib/filters/types";
 import {
+  FILTER_PARAM_KEYS,
   clearSupportedFilters,
   parseFilterSearchParams,
   resetResultPosition,
@@ -95,36 +96,45 @@ export default function JobFiltersSidebar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const paramsKey = searchParams.toString();
+  const [draftParamsKey, setDraftParamsKey] = useState(paramsKey);
+  const [isApplying, startApply] = useTransition();
+
+  useEffect(() => {
+    if (isOpen) setDraftParamsKey(paramsKey);
+  }, [isOpen, paramsKey]);
+
   const filters = useMemo(
     () =>
-      parseFilterSearchParams(new URLSearchParams(paramsKey), {
+      parseFilterSearchParams(new URLSearchParams(draftParamsKey), {
         knownArchetypes,
       }),
-    [knownArchetypes, paramsKey]
+    [knownArchetypes, draftParamsKey]
   );
   const archetypes = useMemo(
     () => Array.from(new Set([...CANONICAL_ARCHETYPES, ...knownArchetypes])),
     [knownArchetypes]
   );
 
-  const replace = useCallback(
+  const updateDraft = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
-      const next = new URLSearchParams(paramsKey);
-      mutate(next);
-      resetResultPosition(next);
-      router.replace(url(pathname, next), { scroll: false });
+      setDraftParamsKey((current) => {
+        const next = new URLSearchParams(current);
+        mutate(next);
+        resetResultPosition(next);
+        return next.toString();
+      });
     },
-    [paramsKey, pathname, router]
+    []
   );
 
   const updateScalar = useCallback(
     (key: string, value: string | undefined) => {
-      replace((next) => {
+      updateDraft((next) => {
         if (value === undefined || value === "") next.delete(key);
         else next.set(key, value);
       });
     },
-    [replace]
+    [updateDraft]
   );
 
   const updateArray = useCallback(
@@ -139,17 +149,25 @@ export default function JobFiltersSidebar({
         | "excludeMetro",
       selected: string[]
     ) => {
-      replace((next) => setRepeatedParam(next, key, selected));
+      updateDraft((next) => setRepeatedParam(next, key, selected));
     },
-    [replace]
+    [updateDraft]
   );
 
   const clearFilters = () => {
-    const next = clearSupportedFilters(
-      new URLSearchParams(paramsKey),
-      supportedFilters
-    );
-    router.replace(url(pathname, next), { scroll: false });
+    updateDraft((next) => {
+      clearSupportedFilters(next, supportedFilters);
+    });
+  };
+
+  const applyFilters = () => {
+    const target = draftParamsKey;
+    startApply(() => {
+      router.replace(url(pathname, new URLSearchParams(target)), {
+        scroll: false,
+      });
+      onClose();
+    });
   };
 
   const hasActiveFilters = supportedFilters.some((filter) => {
@@ -161,6 +179,19 @@ export default function JobFiltersSidebar({
     }
     if (filter === "repostCount") return filters.minRepostCount !== undefined;
     if (filter === "seenCount") return filters.minSeenCount !== undefined;
+    if (filter === "location") {
+      return (
+        filters.province !== undefined ||
+        filters.locationScope !== undefined ||
+        filters.excludeMetro !== undefined
+      );
+    }
+    // Generic fallback based on param keys so composite filters work.
+    const keys = FILTER_PARAM_KEYS[filter];
+    if (keys) {
+      const draft = new URLSearchParams(draftParamsKey);
+      return keys.some((key) => draft.has(key));
+    }
     return filters[filter as keyof typeof filters] !== undefined;
   });
 
@@ -215,7 +246,7 @@ export default function JobFiltersSidebar({
         <header className="flex min-h-16 items-center justify-between border-b border-gray-200 px-5">
           <div>
             <h2 className="font-semibold text-gray-950">Filters</h2>
-            <p className="text-xs text-gray-500">Results update automatically</p>
+            <p className="text-xs text-gray-500">Changes apply together</p>
           </div>
           <div className="flex items-center gap-3">
             {hasActiveFilters && (
@@ -362,7 +393,7 @@ export default function JobFiltersSidebar({
                   type="checkbox"
                   checked={filters.hasSalary === true}
                   onChange={(event) =>
-                    replace((next) => {
+                    updateDraft((next) => {
                       if (event.target.checked) next.set("hasSalary", "true");
                       else {
                         next.delete("hasSalary");
@@ -457,6 +488,26 @@ export default function JobFiltersSidebar({
             </FilterSection>
           )}
         </div>
+        <footer className="flex items-center justify-between gap-3 border-t border-gray-200 px-5 py-4">
+          <p className="text-xs text-gray-500">Changes apply together</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={applyFilters}
+              disabled={isApplying}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-70"
+            >
+              {isApplying ? "Applying…" : "Apply filters"}
+            </button>
+          </div>
+        </footer>
       </aside>
     </>
   );
@@ -469,8 +520,13 @@ function FilterSection({
   label: string;
   children: React.ReactNode;
 }) {
+  const [expanded, setExpanded] = useState(true);
   return (
-    <details open className="group border-b border-gray-200 py-4">
+    <details
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="group border-b border-gray-200 py-4"
+    >
       <summary className="cursor-pointer select-none text-sm font-semibold text-gray-950 marker:text-gray-400">
         {label}
       </summary>

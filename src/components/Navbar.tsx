@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  buildRouteHref,
+  type SupportedRoute,
+} from "@/lib/filters/routeConfig";
 import {
   Briefcase,
   Home,
@@ -43,15 +47,15 @@ export default function Navbar() {
   }, [isMenuOpen]);
 
   const navItems = [
-    { href: "/", icon: <Home size={18} />, text: "Home" },
-    { href: "/jobs/all", icon: <Briefcase size={18} />, text: "All" },
-    { href: "/jobs/top-matches", icon: <Star size={18} />, text: "Matches" },
-    { href: "/jobs/new", icon: <Zap size={18} />, text: "New" },
-    { href: "/jobs/applied", icon: <CheckSquare size={18} />, text: "Applied" },
-    { href: "/insights", icon: <BarChart2 size={18} />, text: "Insights" },
-    { href: "/config", icon: <Settings size={18} />, text: "Config" },
-    { href: "/profile", icon: <User size={18} />, text: "Profile" },
-  ];
+    { href: "/", icon: <Home size={18} />, text: "Home", preserve: false },
+    { href: "/jobs/all", icon: <Briefcase size={18} />, text: "All", preserve: true },
+    { href: "/jobs/top-matches", icon: <Star size={18} />, text: "Matches", preserve: true },
+    { href: "/jobs/new", icon: <Zap size={18} />, text: "New", preserve: true },
+    { href: "/jobs/applied", icon: <CheckSquare size={18} />, text: "Applied", preserve: true },
+    { href: "/insights", icon: <BarChart2 size={18} />, text: "Insights", preserve: true },
+    { href: "/config", icon: <Settings size={18} />, text: "Config", preserve: false },
+    { href: "/profile", icon: <User size={18} />, text: "Profile", preserve: false },
+  ] as const;
 
   return (
     <>
@@ -78,15 +82,14 @@ export default function Navbar() {
             </Link>
 
             <div className="hidden md:flex items-center space-x-1">
-              {navItems.map((item) => (
-                <NavItem
-                  key={item.href}
-                  href={item.href}
-                  icon={item.icon}
-                  text={item.text}
-                  isActive={pathname === item.href}
+              <Suspense fallback={null}>
+                <FilterAwareLinks
+                  navItems={navItems}
+                  pathname={pathname}
+                  mobile={false}
+                  onNavigate={() => setIsMenuOpen(false)}
                 />
-              ))}
+              </Suspense>
             </div>
 
             <button
@@ -123,22 +126,77 @@ export default function Navbar() {
       >
         <div className="mx-4 mt-2 bg-white rounded-xl shadow-lg border border-gray-100">
           <div className="py-2">
-            {navItems.map((item) => (
-              <MobileNavItem
-                key={item.href}
-                href={item.href}
-                icon={item.icon}
-                text={item.text}
-                isActive={pathname === item.href}
-                onClick={() => setIsMenuOpen(false)}
+            <Suspense fallback={null}>
+              <FilterAwareLinks
+                navItems={navItems}
+                pathname={pathname}
+                mobile
+                onNavigate={() => setIsMenuOpen(false)}
               />
-            ))}
+            </Suspense>
           </div>
         </div>
       </div>
 
       {/* Spacer to prevent content from hiding behind fixed navbar */}
       <div className="h-16 flex-shrink-0" />
+    </>
+  );
+}
+
+function FilterAwareLinks({
+  navItems,
+  pathname,
+  mobile,
+  onNavigate,
+}: {
+  navItems: readonly {
+    href: string;
+    icon: React.ReactNode;
+    text: string;
+    preserve: boolean;
+  }[];
+  pathname: string | null;
+  mobile: boolean;
+  onNavigate: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  return (
+    <>
+      {navItems.map((item) => {
+        const href =
+          item.preserve &&
+          (item.href === "/jobs/all" ||
+            item.href === "/jobs/new" ||
+            item.href === "/jobs/top-matches" ||
+            item.href === "/jobs/applied" ||
+            item.href === "/insights")
+            ? buildRouteHref(
+                item.href as SupportedRoute,
+                new URLSearchParams(query),
+              )
+            : item.href;
+        const isActive = pathname === item.href;
+        return mobile ? (
+          <MobileNavItem
+            key={item.href}
+            href={href}
+            icon={item.icon}
+            text={item.text}
+            isActive={isActive}
+            onClick={onNavigate}
+          />
+        ) : (
+          <NavItem
+            key={item.href}
+            href={href}
+            icon={item.icon}
+            text={item.text}
+            isActive={isActive}
+          />
+        );
+      })}
     </>
   );
 }

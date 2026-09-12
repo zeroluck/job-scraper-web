@@ -8,36 +8,21 @@ import RefreshButton from "@/components/jobs/RefreshButton";
 import SearchComponent from "@/components/jobs/SearchComponent";
 import SortOptions from "@/components/jobs/SortOptions";
 import { parseFilterSearchParams } from "@/lib/filters/searchParams";
-import type { FilterId, SortField } from "@/lib/filters/types";
+import { ROUTE_FILTERS, ROUTE_SORTS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
 import { getAppliedJobs, getAppliedJobsCount } from "@/lib/supabase/queries";
 
 const DEFAULT_PAGE_SIZE = 25;
-const SUPPORTED_FILTERS: readonly FilterId[] = [
-  "provider",
-  "applicationStatus",
-  "level",
-  "archetype",
-  "filterStatus",
-  "hasSalary",
-  "salaryRange",
-  "repostCount",
-  "datePosted",
-  "location",
-];
-const SUPPORTED_SORTS: readonly SortField[] = [
-  "application_date",
-  "resume_score",
-  "posted_at",
-  "salary_min",
-  "repost_count",
-];
+const SUPPORTED_FILTERS = ROUTE_FILTERS["/jobs/applied"];
+const SUPPORTED_SORTS = ROUTE_SORTS["/jobs/applied"];
 
 export default async function AppliedJobsPage({
   searchParams,
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const filters = parseFilterSearchParams((await searchParams) ?? {});
+  const filters = parseFilterSearchParams(
+    sanitizeSearchParamsForRoute((await searchParams) ?? {}, "/jobs/applied"),
+  );
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
   const currentPage = filters.page ?? 1;
   const options = { ...filters, page: currentPage, pageSize };

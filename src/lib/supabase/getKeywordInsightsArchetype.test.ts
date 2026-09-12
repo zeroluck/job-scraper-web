@@ -99,7 +99,7 @@ test("getKeywordInsights calls the filtered RPC with safe defaults", async () =>
         p_exclude_metros: null,
         p_category: null,
         p_min_count: 2,
-        p_limit: 1000,
+        p_limit: 250,
         p_offset: 0,
       }],
     },
@@ -133,7 +133,7 @@ test("getKeywordInsights maps array filters and status to RPC parameters", async
     p_exclude_metros: null,
     p_category: "skill",
     p_min_count: 7,
-    p_limit: 1000,
+    p_limit: 250,
     p_offset: 0,
   });
 });

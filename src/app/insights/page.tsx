@@ -4,19 +4,12 @@ import InsightsClient from "@/components/insights/InsightsClient";
 import FilterButton from "@/components/jobs/FilterButton";
 import FilterChips from "@/components/jobs/FilterChips";
 import { parseFilterSearchParams } from "@/lib/filters/searchParams";
-import type { FilterId } from "@/lib/filters/types";
-import { getKeywordInsights } from "@/lib/supabase/queries";
+import { ROUTE_FILTERS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
+import { getCachedKeywordInsights } from "@/lib/supabase/cachedKeywordInsights";
+import { INSIGHTS_KEYWORD_LIMIT } from "@/lib/supabase/queries";
 import { CANONICAL_ARCHETYPES, archetypeLabel } from "@/lib/archetypes/registry";
 
-const INSIGHTS_FILTERS = [
-  "provider",
-  "archetype",
-  "level",
-  "filterStatus",
-  "company",
-  "jobTitle",
-  "location",
-] as const satisfies readonly FilterId[];
+const INSIGHTS_FILTERS = ROUTE_FILTERS["/insights"];
 const KNOWN_ARCHETYPES = CANONICAL_ARCHETYPES;
 
 function InsightsHeader() {
@@ -56,37 +49,42 @@ function InsightsHeader() {
   );
 }
 
-export default async function InsightsPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  const params = await searchParams;
-  const filters = parseFilterSearchParams(params ?? {}, {
-    knownArchetypes: KNOWN_ARCHETYPES,
-  });
-  const archetypes = filters.archetype?.length
-    ? filters.archetype
-    : [...KNOWN_ARCHETYPES];
-  const activeCategory = filters.category ?? "all";
-  const scopeLabel = archetypes.map(archetypeLabel).join(", ");
+function filterKey(params: Record<string, string | string[] | undefined>): string {
+  const sorted: Record<string, string | string[]> = {};
+  for (const key of Object.keys(params).sort()) {
+    const value = params[key];
+    if (value !== undefined) sorted[key] = value;
+  }
+  return JSON.stringify(sorted);
+}
 
-  let result: Awaited<ReturnType<typeof getKeywordInsights>> | undefined;
+function InsightsSkeleton() {
+  return (
+    <div
+      aria-label="Loading insights"
+      className="flex min-h-64 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-400"
+    >
+      Loading insights…
+    </div>
+  );
+}
+
+async function InsightsResults({
+  filtersKey,
+  scopeLabel,
+  activeCategory,
+  queryOptions,
+}: {
+  filtersKey: string;
+  scopeLabel: string;
+  activeCategory: "all" | "skill" | "technology" | "certification" | "attribute";
+  queryOptions: Parameters<typeof getCachedKeywordInsights>[0];
+}) {
+  void filtersKey;
+  let result: Awaited<ReturnType<typeof getCachedKeywordInsights>> | undefined;
   let errorMessage: string | undefined;
   try {
-    result = await getKeywordInsights({
-      providers: filters.provider ? [filters.provider] : undefined,
-      archetypes,
-      levels: filters.level,
-      filterStatus: filters.filterStatus,
-      companies: filters.company,
-      jobTitles: filters.jobTitle,
-      provinces: filters.province,
-      locationScopes: filters.locationScope,
-      excludeMetros: filters.excludeMetro,
-      category: activeCategory,
-      minCount: 2,
-    });
+    result = await getCachedKeywordInsights(queryOptions);
   } catch (error) {
     errorMessage =
       error instanceof Error ? error.message : "Failed to load insights.";
@@ -94,25 +92,65 @@ export default async function InsightsPage({
 
   if (!result) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <InsightsHeader />
-        <div className="flex h-64 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-400">
-          {errorMessage}
-        </div>
+      <div className="flex h-64 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-400">
+        {errorMessage}
       </div>
     );
   }
 
   return (
+    <InsightsClient
+      scopeLabel={scopeLabel}
+      keywords={result.keywords}
+      totalKeywords={result.totalCount}
+      visualizedCount={result.keywords.length}
+      limit={INSIGHTS_KEYWORD_LIMIT}
+      lastUpdated={result.keywords[0]?.last_updated ?? null}
+      activeCategory={activeCategory}
+    />
+  );
+}
+
+export default async function InsightsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const rawParams = (await searchParams) ?? {};
+  const params = sanitizeSearchParamsForRoute(rawParams, "/insights");
+  const filters = parseFilterSearchParams(params, {
+    knownArchetypes: KNOWN_ARCHETYPES,
+  });
+  const archetypes = filters.archetype?.length
+    ? filters.archetype
+    : [...KNOWN_ARCHETYPES];
+  const activeCategory = filters.category ?? "all";
+  const scopeLabel = archetypes.map(archetypeLabel).join(", ");
+  const queryOptions = {
+    providers: filters.provider ? [filters.provider] : undefined,
+    archetypes,
+    levels: filters.level,
+    filterStatus: filters.filterStatus,
+    companies: filters.company,
+    jobTitles: filters.jobTitle,
+    provinces: filters.province,
+    locationScopes: filters.locationScope,
+    excludeMetros: filters.excludeMetro,
+    category: activeCategory,
+    minCount: 2,
+    limit: INSIGHTS_KEYWORD_LIMIT,
+  };
+  const key = filterKey(rawParams);
+
+  return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <InsightsHeader />
-      <Suspense fallback={null}>
-        <InsightsClient
+      <Suspense key={key} fallback={<InsightsSkeleton />}>
+        <InsightsResults
+          filtersKey={key}
           scopeLabel={scopeLabel}
-          keywords={result.keywords}
-          totalKeywords={result.totalCount}
-          lastUpdated={result.keywords[0]?.last_updated ?? null}
           activeCategory={activeCategory}
+          queryOptions={queryOptions}
         />
       </Suspense>
     </div>

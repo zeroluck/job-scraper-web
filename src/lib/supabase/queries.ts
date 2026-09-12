@@ -127,6 +127,8 @@ const dateCutoffCache = new WeakMap<
 >();
 const booleanSearchCache = new WeakMap<object, Map<JobListKind, Promise<BooleanSearchPage>>>();
 
+export const INSIGHTS_KEYWORD_LIMIT = 250;
+
 export interface KeywordInsightsQueryOptions {
   provider?: string | readonly string[];
   providers?: readonly string[];
@@ -141,6 +143,14 @@ export interface KeywordInsightsQueryOptions {
   excludeMetros?: readonly string[];
   category?: string;
   minCount?: number;
+  limit?: number;
+}
+
+export function normalizeInsightsLimit(limit?: number): number {
+  if (!Number.isFinite(limit)) return INSIGHTS_KEYWORD_LIMIT;
+  const parsed = Math.trunc(limit as number);
+  if (!Number.isSafeInteger(parsed)) return INSIGHTS_KEYWORD_LIMIT;
+  return Math.min(500, Math.max(1, parsed));
 }
 
 type LegacyInterest = boolean | null | undefined;
@@ -798,47 +808,43 @@ function keywordFilterStatus(
   return "unfiltered";
 }
 
+export async function executeKeywordInsightsQuery(
+  supabase: any,
+  options: KeywordInsightsQueryOptions = {},
+): Promise<KeywordInsightsResult> {
+  const limit = normalizeInsightsLimit(options.limit);
+  const response = await supabase.rpc("get_filtered_keyword_insights", {
+    p_providers: arrayOption(options.providers, options.provider),
+    p_archetypes: compatibleArchetypeValues(
+      arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+    ),
+    p_levels: nonEmpty(options.levels),
+    p_filter_status: keywordFilterStatus(options.filterStatus),
+    p_companies: nonEmpty(options.companies),
+    p_job_titles: nonEmpty(options.jobTitles),
+    p_provinces: nonEmpty(options.provinces),
+    p_location_scopes: nonEmpty(options.locationScopes),
+    p_exclude_metros: nonEmpty(options.excludeMetros),
+    p_category: options.category && options.category !== "all" ? options.category : null,
+    p_min_count: Math.max(0, Math.trunc(finiteNumber(options.minCount) ?? 2)),
+    p_limit: limit,
+    p_offset: 0,
+  });
+  const rows = ((await handleResponse(response)) ?? []) as Array<KeywordInsight & {
+    total_count?: number | string | null;
+  }>;
+
+  const parsedTotal = Number(rows[0]?.total_count);
+  const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
+  const keywords = rows.map(({ total_count: _totalCount, ...row }) => row);
+  return { keywords, totalCount };
+}
+
 export async function getKeywordInsights(
   options: KeywordInsightsQueryOptions = {},
 ): Promise<KeywordInsightsResult> {
   const supabase = await supabaseClientFactory();
-  const batchSize = 1000;
-  const keywords: KeywordInsight[] = [];
-  let offset = 0;
-  let totalCount: number | null = null;
-
-  while (totalCount === null || keywords.length < totalCount) {
-    const response = await supabase.rpc("get_filtered_keyword_insights", {
-      p_providers: arrayOption(options.providers, options.provider),
-      p_archetypes: compatibleArchetypeValues(
-        arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
-      ),
-      p_levels: nonEmpty(options.levels),
-      p_filter_status: keywordFilterStatus(options.filterStatus),
-      p_companies: nonEmpty(options.companies),
-      p_job_titles: nonEmpty(options.jobTitles),
-      p_provinces: nonEmpty(options.provinces),
-      p_location_scopes: nonEmpty(options.locationScopes),
-      p_exclude_metros: nonEmpty(options.excludeMetros),
-      p_category: options.category && options.category !== "all" ? options.category : null,
-      p_min_count: Math.max(0, Math.trunc(finiteNumber(options.minCount) ?? 2)),
-      p_limit: batchSize,
-      p_offset: offset,
-    });
-    const rows = ((await handleResponse(response)) ?? []) as Array<KeywordInsight & {
-      total_count?: number | string | null;
-    }>;
-
-    if (totalCount === null) {
-      const parsedTotal = Number(rows[0]?.total_count);
-      totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
-    }
-    keywords.push(...rows.map(({ total_count: _totalCount, ...row }) => row));
-    if (!rows.length) break;
-    offset += rows.length;
-  }
-
-  return { keywords, totalCount: totalCount ?? keywords.length };
+  return executeKeywordInsightsQuery(supabase, options);
 }
 
 export async function getJobKeywordInsights(
