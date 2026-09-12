@@ -620,6 +620,7 @@ function CheckboxList<T extends string>({
         >
           <input
             type="checkbox"
+            value={value}
             checked={selected.includes(value)}
             onChange={(event) =>
               onChange(
