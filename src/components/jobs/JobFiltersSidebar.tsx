@@ -108,12 +108,7 @@ export default function JobFiltersSidebar({
     if (isOpen && !wasOpen.current) {
       setDraftParamsKey(paramsKey);
     } else if (isOpen && paramsKey !== prevParamsKey.current) {
-      let hasUnsavedEdits = true;
-      try {
-        hasUnsavedEdits = draftParamsKey !== prevParamsKey.current;
-      } catch {
-        hasUnsavedEdits = true;
-      }
+      const hasUnsavedEdits = draftParamsKey !== prevParamsKey.current;
       if (!hasUnsavedEdits) setDraftParamsKey(paramsKey);
     }
     wasOpen.current = isOpen;

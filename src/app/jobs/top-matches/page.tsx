@@ -8,6 +8,7 @@ import SearchComponent from "@/components/jobs/SearchComponent";
 import SortOptions from "@/components/jobs/SortOptions";
 import TopMatchesList from "@/components/jobs/TopMatchesList";
 import { parseFilterSearchParams } from "@/lib/filters/searchParams";
+import { parsePageParam } from "@/lib/filters/pageParam";
 import { ROUTE_FILTERS, ROUTE_SORTS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
 import {
   getTopScoredJobs,
@@ -23,11 +24,12 @@ export default async function TopMatchesPage({
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const rawParams = (await searchParams) ?? {};
   const filters = parseFilterSearchParams(
-    sanitizeSearchParamsForRoute((await searchParams) ?? {}, "/jobs/top-matches"),
+    sanitizeSearchParamsForRoute(rawParams, "/jobs/top-matches"),
   );
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
-  const currentPage = filters.page ?? 1;
+  const currentPage = parsePageParam(rawParams) ?? 1;
   const options = { ...filters, page: currentPage, pageSize };
   const [topJobs, totalCount] = await Promise.all([
     getTopScoredJobs(options),

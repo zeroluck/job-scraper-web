@@ -8,6 +8,7 @@ import RefreshButton from "@/components/jobs/RefreshButton";
 import SearchComponent from "@/components/jobs/SearchComponent";
 import SortOptions from "@/components/jobs/SortOptions";
 import { parseFilterSearchParams } from "@/lib/filters/searchParams";
+import { parsePageParam } from "@/lib/filters/pageParam";
 import { ROUTE_FILTERS, ROUTE_SORTS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
 import { getAppliedJobs, getAppliedJobsCount } from "@/lib/supabase/queries";
 
@@ -20,11 +21,12 @@ export default async function AppliedJobsPage({
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const rawParams = (await searchParams) ?? {};
   const filters = parseFilterSearchParams(
-    sanitizeSearchParamsForRoute((await searchParams) ?? {}, "/jobs/applied"),
+    sanitizeSearchParamsForRoute(rawParams, "/jobs/applied"),
   );
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
-  const currentPage = filters.page ?? 1;
+  const currentPage = parsePageParam(rawParams) ?? 1;
   const options = { ...filters, page: currentPage, pageSize };
   const [appliedJobs, totalCount] = await Promise.all([
     getAppliedJobs(options),

@@ -8,6 +8,7 @@ import SearchComponent from "@/components/jobs/SearchComponent";
 import SortOptions from "@/components/jobs/SortOptions";
 import TopMatchesList from "@/components/jobs/TopMatchesList";
 import { parseFilterSearchParams } from "@/lib/filters/searchParams";
+import { parsePageParam } from "@/lib/filters/pageParam";
 import { ROUTE_FILTERS, ROUTE_SORTS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
 import { getAllJobs, getAllJobsCount } from "@/lib/supabase/queries";
 
@@ -20,11 +21,12 @@ export default async function AllJobsPage({
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const rawParams = (await searchParams) ?? {};
   const filters = parseFilterSearchParams(
-    sanitizeSearchParamsForRoute((await searchParams) ?? {}, "/jobs/all"),
+    sanitizeSearchParamsForRoute(rawParams, "/jobs/all"),
   );
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
-  const currentPage = filters.page ?? 1;
+  const currentPage = parsePageParam(rawParams) ?? 1;
   const options = { ...filters, page: currentPage, pageSize };
   const [jobs, totalCount] = await Promise.all([
     getAllJobs(options),
