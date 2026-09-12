@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
@@ -98,10 +98,27 @@ export default function JobFiltersSidebar({
   const paramsKey = searchParams.toString();
   const [draftParamsKey, setDraftParamsKey] = useState(paramsKey);
   const [isApplying, startApply] = useTransition();
+  const wasOpen = useRef(isOpen);
+  const prevParamsKey = useRef(paramsKey);
 
   useEffect(() => {
-    if (isOpen) setDraftParamsKey(paramsKey);
-  }, [isOpen, paramsKey]);
+    // Sync the draft when the drawer opens. While open, only follow the
+    // committed URL when there are no unsaved edits, so an in-flight Apply
+    // never wipes out tweaks made before it commits.
+    if (isOpen && !wasOpen.current) {
+      setDraftParamsKey(paramsKey);
+    } else if (isOpen && paramsKey !== prevParamsKey.current) {
+      let hasUnsavedEdits = true;
+      try {
+        hasUnsavedEdits = draftParamsKey !== prevParamsKey.current;
+      } catch {
+        hasUnsavedEdits = true;
+      }
+      if (!hasUnsavedEdits) setDraftParamsKey(paramsKey);
+    }
+    wasOpen.current = isOpen;
+    prevParamsKey.current = paramsKey;
+  }, [isOpen, paramsKey, draftParamsKey]);
 
   const filters = useMemo(
     () =>
@@ -160,13 +177,15 @@ export default function JobFiltersSidebar({
     });
   };
 
+  const hasUnappliedChanges = draftParamsKey !== paramsKey;
+
   const applyFilters = () => {
     const target = draftParamsKey;
+    // Keep the drawer open so results can be refined without reopening.
     startApply(() => {
       router.replace(url(pathname, new URLSearchParams(target)), {
         scroll: false,
       });
-      onClose();
     });
   };
 
@@ -489,19 +508,25 @@ export default function JobFiltersSidebar({
           )}
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-gray-200 px-5 py-4">
-          <p className="text-xs text-gray-500">Changes apply together</p>
+          <p className="text-xs text-gray-500">
+            {isApplying
+              ? "Applying…"
+              : hasUnappliedChanges
+                ? "Unapplied changes"
+                : "Changes apply together"}
+          </p>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              Cancel
+              Close
             </button>
             <button
               type="button"
               onClick={applyFilters}
-              disabled={isApplying}
+              disabled={isApplying || !hasUnappliedChanges}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-70"
             >
               {isApplying ? "Applying…" : "Apply filters"}
