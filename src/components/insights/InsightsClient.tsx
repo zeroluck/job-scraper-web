@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -12,6 +13,10 @@ import {
 import type { JobListItem, KeywordInsight } from "@/types";
 import TopMatchesList from "@/components/jobs/TopMatchesList";
 import { CATEGORY_COLORS, CATEGORY_LABELS } from "./categoryColors";
+import {
+  DEFAULT_WORD_CLOUD_COUNT,
+  WORD_CLOUD_COUNT_OPTIONS,
+} from "./WordCloudClient";
 
 const WordCloudClient = dynamic(() => import("./WordCloudClient"), {
   ssr: false,
@@ -126,6 +131,13 @@ export default function InsightsClient({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [visibleCount, setVisibleCount] = useState<number>(
+    DEFAULT_WORD_CLOUD_COUNT,
+  );
+  const visibleKeywords = useMemo(
+    () => keywords.slice(0, visibleCount),
+    [keywords, visibleCount],
+  );
 
   const selectCategory = (category: InsightsCategory) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -241,9 +253,40 @@ export default function InsightsClient({
 
       {keywords.length ? (
         <>
-          <div className="mb-8 min-h-64 rounded-xl border border-gray-200 bg-gray-50">
+          <div className="mb-8 min-h-64 rounded-xl border border-gray-200 bg-gray-50 p-4">
             {activeCategory === "all" && <Legend />}
-            <WordCloudClient keywords={keywords} onWordClick={selectKeyword} />
+            <div
+              className="mb-2 flex flex-wrap items-center justify-between gap-2"
+              role="radiogroup"
+              aria-label="Number of keywords to display"
+            >
+              <span className="text-xs text-gray-500">
+                Showing top {visibleKeywords.length} of {keywords.length}
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {WORD_CLOUD_COUNT_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={visibleCount === option}
+                    onClick={() => setVisibleCount(option)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      visibleCount === option
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <WordCloudClient
+              keywords={visibleKeywords}
+              selectedKeyword={selectedKeyword}
+              onWordClick={selectKeyword}
+            />
           </div>
 
           <div className="mb-4">

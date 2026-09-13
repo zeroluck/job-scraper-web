@@ -14,11 +14,20 @@ import {
 } from "@isoterik/react-word-cloud";
 import type { Ref } from "react";
 
+import { ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+
 import type { KeywordInsight } from "@/types";
 import { CATEGORY_COLORS } from "./categoryColors";
+import { computeWordFontSize, getWordAnimationDelay } from "./wordCloudScale";
 
 const CLOUD_WIDTH = 960;
 const CLOUD_HEIGHT = 500;
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 2.5;
+const ZOOM_STEP = 0.25;
+
+export const WORD_CLOUD_COUNT_OPTIONS = [50, 100, 150, 250] as const;
+export const DEFAULT_WORD_CLOUD_COUNT = 100;
 
 const NO_ROTATION = () => 0;
 
@@ -136,14 +145,18 @@ function AccessibleWord({
 
 type WordCloudClientProps = {
   keywords: KeywordInsight[];
+  selectedKeyword?: string;
   onWordClick?: (keyword: string, category: string) => void;
 };
 
 export default function WordCloudClient({
   keywords,
+  selectedKeyword,
   onWordClick,
 }: WordCloudClientProps) {
   const reducedMotion = usePrefersReducedMotion();
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   const words: Word[] = useMemo(
     () => keywords.map((k) => ({ text: k.keyword, value: k.count })),
@@ -171,12 +184,10 @@ export default function WordCloudClient({
     setVisibleSignature(null);
   }, [signature]);
 
+  // sqrt domain so long-tail terms stay distinguishable (d3-cloud default).
   const fontSize = useMemo(() => {
     if (!Number.isFinite(minCount) || maxCount === minCount) return 30;
-    return (word: Word) => {
-      const normalized = (word.value - minCount) / (maxCount - minCount);
-      return Math.round(14 + normalized * 42);
-    };
+    return (word: Word) => computeWordFontSize(word.value, minCount, maxCount);
   }, [minCount, maxCount]);
 
   const opacityOf = useCallback((count: number): number => {
@@ -185,21 +196,35 @@ export default function WordCloudClient({
     return 0.9 + normalized * 0.1;
   }, [maxCount, minCount]);
 
+  const isDimmed = useCallback(
+    (index: number) => {
+      const keyword = keywords[index];
+      if (selectedKeyword && keyword?.keyword !== selectedKeyword) return true;
+      if (hoveredIndex !== null && hoveredIndex !== index) return true;
+      return false;
+    },
+    [hoveredIndex, keywords, selectedKeyword],
+  );
+
   const renderWord: WordRenderer = useCallback(
-    (data, ref) => (
-      <AccessibleWord
-        data={data}
-        wordRef={ref}
-        opacity={opacityOf(data.value)}
-        reducedMotion={reducedMotion}
-        animationDelay={data.index * 10}
-        onSelect={() => {
-          const keyword = keywords[data.index];
-          if (keyword) onWordClick?.(keyword.keyword, keyword.category);
-        }}
-      />
-    ),
-    [keywords, onWordClick, opacityOf, reducedMotion],
+    (data, ref) => {
+      const base = opacityOf(data.value);
+      const opacity = isDimmed(data.index) ? Math.min(base, 0.35) : base;
+      return (
+        <AccessibleWord
+          data={data}
+          wordRef={ref}
+          opacity={opacity}
+          reducedMotion={reducedMotion}
+          animationDelay={getWordAnimationDelay(data.index)}
+          onSelect={() => {
+            const keyword = keywords[data.index];
+            if (keyword) onWordClick?.(keyword.keyword, keyword.category);
+          }}
+        />
+      );
+    },
+    [isDimmed, keywords, onWordClick, opacityOf, reducedMotion],
   );
 
   const handleWordClick = useCallback(
@@ -209,6 +234,22 @@ export default function WordCloudClient({
     },
     [keywords, onWordClick],
   );
+  const handleWordMouseOver = useCallback(
+    (_word: FinalWordData, index: number) => setHoveredIndex(index),
+    [],
+  );
+  const handleWordMouseOut = useCallback(() => setHoveredIndex(null), []);
+  const zoomIn = useCallback(
+    () => setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100)),
+    [],
+  );
+  const zoomOut = useCallback(
+    () => setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100)),
+    [],
+  );
+  const resetZoom = useCallback(() => {
+    setZoom(1);
+  }, []);
   const fill = useCallback(
     (_word: Word, index: number) =>
       CATEGORY_COLORS[keywords[index]?.category ?? ""] ?? "#374151",
@@ -228,34 +269,83 @@ export default function WordCloudClient({
   }
 
   return (
-    <div
-      className={`transition-opacity motion-safe:duration-300 ${
-        visibleSignature === signature ? "opacity-100" : "opacity-0"
-      }`}
-    >
-      <WordCloud
-        words={words}
-        width={CLOUD_WIDTH}
-        height={CLOUD_HEIGHT}
-        spiral="archimedean"
-        padding={2}
-        font="Inter, ui-sans-serif, system-ui, sans-serif"
-        fontSize={fontSize}
-        rotate={NO_ROTATION}
-        fill={fill}
-        transition={reducedMotion ? "none" : "all .3s ease"}
-        enableTooltip
-        renderTooltip={renderTooltip}
-        renderWord={renderWord}
-        onWordClick={handleWordClick}
-        onCompleteComputation={handleComplete}
-        svgProps={{
-          className: "h-auto w-full",
-          role: "group",
-          "aria-label":
-            "Keyword word cloud. Activate a word to filter jobs mentioning it.",
-        }}
-      />
+    <div>
+      <div
+        className="mb-2 flex items-center justify-end gap-1"
+        role="group"
+        aria-label="Word cloud zoom controls"
+      >
+        <span aria-live="polite" className="mr-1 text-xs text-gray-500">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          type="button"
+          onClick={zoomOut}
+          disabled={zoom <= ZOOM_MIN}
+          aria-label="Zoom word cloud out"
+          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+        >
+          <ZoomOut className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={zoomIn}
+          disabled={zoom >= ZOOM_MAX}
+          aria-label="Zoom word cloud in"
+          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+        >
+          <ZoomIn className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={resetZoom}
+          disabled={zoom === 1}
+          aria-label="Reset word cloud zoom"
+          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+        >
+          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div
+        className={`overflow-hidden transition-opacity motion-safe:duration-300 ${
+          visibleSignature === signature ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: "center center",
+            transition: reducedMotion ? "none" : "transform .2s ease",
+          }}
+        >
+          <WordCloud
+            words={words}
+            width={CLOUD_WIDTH}
+            height={CLOUD_HEIGHT}
+            timeInterval={16}
+            spiral="archimedean"
+            padding={2}
+            font="Inter, ui-sans-serif, system-ui, sans-serif"
+            fontSize={fontSize}
+            rotate={NO_ROTATION}
+            fill={fill}
+            transition={reducedMotion ? "none" : "all .3s ease"}
+            enableTooltip
+            renderTooltip={renderTooltip}
+            renderWord={renderWord}
+            onWordClick={handleWordClick}
+            onWordMouseOver={handleWordMouseOver}
+            onWordMouseOut={handleWordMouseOut}
+            onCompleteComputation={handleComplete}
+            svgProps={{
+              className: "h-auto w-full",
+              role: "group",
+              "aria-label":
+                "Keyword word cloud. Activate a word to filter jobs mentioning it.",
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
