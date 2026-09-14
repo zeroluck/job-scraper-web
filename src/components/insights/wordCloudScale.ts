@@ -1,5 +1,5 @@
-export const WORD_CLOUD_MIN_FONT = 16;
-export const WORD_CLOUD_MAX_FONT = 56;
+export const WORD_CLOUD_MIN_FONT = 10;
+export const WORD_CLOUD_MAX_FONT = 64;
 export const WORD_CLOUD_ANIMATION_DELAY_STEP_MS = 10;
 export const WORD_CLOUD_MAX_ANIMATION_DELAY_MS = 300;
 

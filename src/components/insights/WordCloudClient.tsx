@@ -21,7 +21,8 @@ import { CATEGORY_COLORS } from "./categoryColors";
 import { computeWordFontSize, getWordAnimationDelay } from "./wordCloudScale";
 
 const CLOUD_WIDTH = 960;
-const CLOUD_HEIGHT = 500;
+const CLOUD_HEIGHT = 560;
+const CLOUD_PADDING = 4;
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.25;
@@ -157,6 +158,27 @@ export default function WordCloudClient({
   const reducedMotion = usePrefersReducedMotion();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
+  // Wait for webfonts before running d3-cloud: canvas measurement must use
+  // the same metrics the SVG renders with, otherwise words overlap.
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof document === "undefined" || !("fonts" in document)) {
+      setFontsReady(true);
+      return;
+    }
+    document.fonts.ready.then(
+      () => {
+        if (!cancelled) setFontsReady(true);
+      },
+      () => {
+        if (!cancelled) setFontsReady(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const words: Word[] = useMemo(
     () => keywords.map((k) => ({ text: k.keyword, value: k.count })),
@@ -173,16 +195,12 @@ export default function WordCloudClient({
     return { minCount: min, maxCount: max };
   }, [keywords]);
 
-  // Opacity cross-fade while d3-cloud recomputes: hide on input change,
-  // reveal on completion. No spring layout interpolation by design.
+  // Remount the cloud when the keyword set changes so the staggered
+  // entrance animation replays visibly (no opacity gate hiding it).
   const signature = useMemo(
     () => keywords.map((k) => `${k.category}:${k.keyword}:${k.count}`).join("|"),
     [keywords],
   );
-  const [visibleSignature, setVisibleSignature] = useState<string | null>(null);
-  useEffect(() => {
-    setVisibleSignature(null);
-  }, [signature]);
 
   // sqrt domain so long-tail terms stay distinguishable (d3-cloud default).
   const fontSize = useMemo(() => {
@@ -255,15 +273,21 @@ export default function WordCloudClient({
       CATEGORY_COLORS[keywords[index]?.category ?? ""] ?? "#374151",
     [keywords],
   );
-  const handleComplete = useCallback(
-    () => setVisibleSignature(signature),
-    [signature],
-  );
-
   if (!keywords.length) {
     return (
       <div className="flex h-64 items-center justify-center text-gray-400">
         No data available for this category.
+      </div>
+    );
+  }
+
+  if (!fontsReady) {
+    return (
+      <div
+        aria-label="Loading word cloud"
+        className="flex h-64 items-center justify-center text-gray-400"
+      >
+        Loading word cloud…
       </div>
     );
   }
@@ -306,11 +330,7 @@ export default function WordCloudClient({
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      <div
-        className={`overflow-hidden transition-opacity motion-safe:duration-300 ${
-          visibleSignature === signature ? "opacity-100" : "opacity-0"
-        }`}
-      >
+      <div className="overflow-hidden">
         <div
           style={{
             transform: `scale(${zoom})`,
@@ -319,12 +339,13 @@ export default function WordCloudClient({
           }}
         >
           <WordCloud
+            key={signature}
             words={words}
             width={CLOUD_WIDTH}
             height={CLOUD_HEIGHT}
             timeInterval={16}
             spiral="archimedean"
-            padding={2}
+            padding={CLOUD_PADDING}
             font="Inter, ui-sans-serif, system-ui, sans-serif"
             fontSize={fontSize}
             rotate={NO_ROTATION}
@@ -336,7 +357,6 @@ export default function WordCloudClient({
             onWordClick={handleWordClick}
             onWordMouseOver={handleWordMouseOver}
             onWordMouseOut={handleWordMouseOut}
-            onCompleteComputation={handleComplete}
             svgProps={{
               className: "h-auto w-full",
               role: "group",
