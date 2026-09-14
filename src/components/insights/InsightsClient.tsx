@@ -161,7 +161,8 @@ export default function InsightsClient({
     }
     resetResultPosition(next);
     const query = next.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    // Push (not replace) so browser Back returns to the undrilled cloud.
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   const clearKeyword = () => {
@@ -169,7 +170,8 @@ export default function InsightsClient({
     next.delete("keyword");
     resetResultPosition(next);
     const query = next.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    // Push to keep Back/Forward symmetric with drill-down.
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   const keywordTotalPages = Math.max(
