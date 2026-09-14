@@ -35,6 +35,6 @@ test("font scale falls back for degenerate domains", () => {
 test("animation delay staggers then caps", () => {
   assert.equal(getWordAnimationDelay(0), 0);
   assert.equal(getWordAnimationDelay(5), 50);
-  assert.equal(getWordAnimationDelay(30), 300);
-  assert.equal(getWordAnimationDelay(249), 300);
+  assert.equal(getWordAnimationDelay(60), 600);
+  assert.equal(getWordAnimationDelay(249), 600);
 });

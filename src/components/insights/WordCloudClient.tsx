@@ -130,6 +130,8 @@ function AccessibleWord({
             fill: data.fill,
           }}
           onClick={(event) => data.onWordClick?.(data, data.index, event)}
+          onMouseOver={(event) => data.onWordMouseOver?.(data, data.index, event)}
+          onMouseOut={(event) => data.onWordMouseOut?.(data, data.index, event)}
         >
           {data.text}
         </text>
