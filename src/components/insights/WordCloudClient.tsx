@@ -158,25 +158,27 @@ export default function WordCloudClient({
   const reducedMotion = usePrefersReducedMotion();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  // Wait for webfonts before running d3-cloud: canvas measurement must use
-  // the same metrics the SVG renders with, otherwise words overlap.
+  // Force the actual webfont load before running d3-cloud: its canvas
+  // measurement must use the same metrics the SVG renders with, otherwise
+  // words overlap. (document.fonts.ready alone is not enough — it can
+  // resolve before a lazily-requested family like Inter has loaded.)
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    const done = () => {
+      if (!cancelled) setFontsReady(true);
+    };
     if (typeof document === "undefined" || !("fonts" in document)) {
-      setFontsReady(true);
+      done();
       return;
     }
-    document.fonts.ready.then(
-      () => {
-        if (!cancelled) setFontsReady(true);
-      },
-      () => {
-        if (!cancelled) setFontsReady(true);
-      },
-    );
+    const specs = ["10px Inter", "32px Inter", "64px Inter", "bold 32px Inter"];
+    Promise.all(specs.map((spec) => document.fonts.load(spec).catch(() => [])))
+      .then(done, done);
+    const fallback = window.setTimeout(done, 2000);
     return () => {
       cancelled = true;
+      window.clearTimeout(fallback);
     };
   }, []);
 
