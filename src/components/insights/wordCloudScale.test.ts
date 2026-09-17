@@ -4,8 +4,11 @@ import test from "node:test";
 import {
   computeWordFontSize,
   getWordAnimationDelay,
+  quantizeFontSize,
+  WORD_CLOUD_LEVEL_PRESETS,
   WORD_CLOUD_MAX_FONT,
   WORD_CLOUD_MIN_FONT,
+  WORD_CLOUD_SPREAD_PRESETS,
 } from "./wordCloudScale.ts";
 
 test("font scale maps min and max to bounds", () => {
@@ -25,11 +28,33 @@ test("sqrt scale spreads long-tail counts with small smalls", () => {
   assert.ok(agile - kanban >= 10, "tail spread should be >= 10px");
 });
 
+test("font scale honors custom spread bounds", () => {
+  const narrow = WORD_CLOUD_SPREAD_PRESETS[0];
+  assert.equal(
+    computeWordFontSize(42, 42, 1419, narrow.min, narrow.max),
+    narrow.min,
+  );
+  assert.equal(
+    computeWordFontSize(1419, 42, 1419, narrow.min, narrow.max),
+    narrow.max,
+  );
+});
+
 test("font scale falls back for degenerate domains", () => {
   assert.equal(
     computeWordFontSize(10, 10, 10),
     Math.round((WORD_CLOUD_MIN_FONT + WORD_CLOUD_MAX_FONT) / 2),
   );
+});
+
+test("quantize snaps sizes to levels", () => {
+  assert.equal(quantizeFontSize(24, 10, 64, 0), 24);
+  assert.equal(quantizeFontSize(24, 10, 64, 1), 24);
+  // 3 levels of 10-64: 10, 37, 64
+  assert.equal(quantizeFontSize(20, 10, 64, 3), 10);
+  assert.equal(quantizeFontSize(24, 10, 64, 3), 37);
+  assert.equal(quantizeFontSize(60, 10, 64, 3), 64);
+  assert.ok(WORD_CLOUD_LEVEL_PRESETS.length >= 2);
 });
 
 test("animation delay staggers then caps", () => {

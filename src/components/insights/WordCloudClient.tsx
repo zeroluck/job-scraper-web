@@ -14,21 +14,27 @@ import {
 } from "@isoterik/react-word-cloud";
 import type { Ref } from "react";
 
-import { ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 
 import type { KeywordInsight } from "@/types";
 import { CATEGORY_COLORS } from "./categoryColors";
-import { computeWordFontSize, getWordAnimationDelay } from "./wordCloudScale";
+import {
+  computeWordFontSize,
+  DEFAULT_LEVEL_INDEX,
+  DEFAULT_SPREAD_INDEX,
+  getWordAnimationDelay,
+  quantizeFontSize,
+  WORD_CLOUD_LEVEL_PRESETS,
+  WORD_CLOUD_SPREAD_PRESETS,
+} from "./wordCloudScale";
 
 const CLOUD_WIDTH = 960;
 const CLOUD_HEIGHT = 560;
 const CLOUD_PADDING = 4;
-const ZOOM_MIN = 0.6;
-const ZOOM_MAX = 2.5;
-const ZOOM_STEP = 0.25;
+const HOVER_DIM_OPACITY = 0.55;
 
 export const WORD_CLOUD_COUNT_OPTIONS = [50, 100, 150, 250] as const;
-export const DEFAULT_WORD_CLOUD_COUNT = 100;
+export const DEFAULT_WORD_CLOUD_COUNT = 250;
 
 const NO_ROTATION = () => 0;
 
@@ -100,7 +106,11 @@ function AccessibleWord({
       tabIndex={0}
       role="button"
       aria-label={label}
-      style={{ cursor: "pointer", opacity }}
+      style={{
+        cursor: "pointer",
+        opacity,
+        transition: reducedMotion ? "none" : "opacity 0.25s ease",
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -159,7 +169,8 @@ export default function WordCloudClient({
 }: WordCloudClientProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [spreadIndex, setSpreadIndex] = useState<number>(DEFAULT_SPREAD_INDEX);
+  const [levelIndex, setLevelIndex] = useState<number>(DEFAULT_LEVEL_INDEX);
   // Force the actual webfont load before running d3-cloud: its canvas
   // measurement must use the same metrics the SVG renders with, otherwise
   // words overlap. (document.fonts.ready alone is not enough — it can
@@ -206,11 +217,23 @@ export default function WordCloudClient({
     [keywords],
   );
 
-  // sqrt domain so long-tail terms stay distinguishable (d3-cloud default).
+  // sqrt domain so long-tail terms stay distinguishable (d3-cloud default),
+  // then snap to the chosen number of size levels.
+  const spread = WORD_CLOUD_SPREAD_PRESETS[spreadIndex] ?? WORD_CLOUD_SPREAD_PRESETS[DEFAULT_SPREAD_INDEX];
+  const levels = WORD_CLOUD_LEVEL_PRESETS[levelIndex] ?? WORD_CLOUD_LEVEL_PRESETS[DEFAULT_LEVEL_INDEX];
   const fontSize = useMemo(() => {
     if (!Number.isFinite(minCount) || maxCount === minCount) return 30;
-    return (word: Word) => computeWordFontSize(word.value, minCount, maxCount);
-  }, [minCount, maxCount]);
+    return (word: Word) => {
+      const size = computeWordFontSize(
+        word.value,
+        minCount,
+        maxCount,
+        spread.min,
+        spread.max,
+      );
+      return quantizeFontSize(size, spread.min, spread.max, levels.levels);
+    };
+  }, [levels.levels, maxCount, minCount, spread.max, spread.min]);
 
   const opacityOf = useCallback((count: number): number => {
     if (!Number.isFinite(minCount) || maxCount === minCount) return 1;
@@ -231,7 +254,9 @@ export default function WordCloudClient({
   const renderWord: WordRenderer = useCallback(
     (data, ref) => {
       const base = opacityOf(data.value);
-      const opacity = isDimmed(data.index) ? Math.min(base, 0.35) : base;
+      const opacity = isDimmed(data.index)
+        ? Math.min(base, HOVER_DIM_OPACITY)
+        : base;
       return (
         <AccessibleWord
           data={data}
@@ -261,17 +286,26 @@ export default function WordCloudClient({
     [],
   );
   const handleWordMouseOut = useCallback(() => setHoveredIndex(null), []);
-  const zoomIn = useCallback(
-    () => setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100)),
+  const stepSpread = useCallback(
+    (delta: number) =>
+      setSpreadIndex((i) =>
+        Math.min(
+          WORD_CLOUD_SPREAD_PRESETS.length - 1,
+          Math.max(0, i + delta),
+        ),
+      ),
     [],
   );
-  const zoomOut = useCallback(
-    () => setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100)),
+  const stepLevels = useCallback(
+    (delta: number) =>
+      setLevelIndex((i) =>
+        Math.min(
+          WORD_CLOUD_LEVEL_PRESETS.length - 1,
+          Math.max(0, i + delta),
+        ),
+      ),
     [],
   );
-  const resetZoom = useCallback(() => {
-    setZoom(1);
-  }, []);
   const fill = useCallback(
     (_word: Word, index: number) =>
       CATEGORY_COLORS[keywords[index]?.category ?? ""] ?? "#374151",
@@ -298,78 +332,88 @@ export default function WordCloudClient({
 
   return (
     <div>
-      <div
-        className="mb-2 flex items-center justify-end gap-1"
-        role="group"
-        aria-label="Word cloud zoom controls"
-      >
-        <span aria-live="polite" className="mr-1 text-xs text-gray-500">
-          {Math.round(zoom * 100)}%
-        </span>
-        <button
-          type="button"
-          onClick={zoomOut}
-          disabled={zoom <= ZOOM_MIN}
-          aria-label="Zoom word cloud out"
-          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
-        >
-          <ZoomOut className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={zoomIn}
-          disabled={zoom >= ZOOM_MAX}
-          aria-label="Zoom word cloud in"
-          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
-        >
-          <ZoomIn className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={resetZoom}
-          disabled={zoom === 1}
-          aria-label="Reset word cloud zoom"
-          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
-        >
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-      <div className="overflow-hidden">
+      <div className="mb-2 flex flex-wrap items-center justify-end gap-4">
         <div
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: "center center",
-            transition: reducedMotion ? "none" : "transform .2s ease",
-          }}
+          className="flex items-center gap-1"
+          role="group"
+          aria-label="Word size spread controls"
         >
-          <WordCloud
-            key={signature}
-            words={words}
-            width={CLOUD_WIDTH}
-            height={CLOUD_HEIGHT}
-            timeInterval={16}
-            spiral="archimedean"
-            padding={CLOUD_PADDING}
-            font="Inter, ui-sans-serif, system-ui, sans-serif"
-            fontSize={fontSize}
-            rotate={NO_ROTATION}
-            fill={fill}
-            transition={reducedMotion ? "none" : "all .3s ease"}
-            enableTooltip
-            renderTooltip={renderTooltip}
-            renderWord={renderWord}
-            onWordClick={handleWordClick}
-            onWordMouseOver={handleWordMouseOver}
-            onWordMouseOut={handleWordMouseOut}
-            svgProps={{
-              className: "h-auto w-full",
-              role: "group",
-              "aria-label":
-                "Keyword word cloud. Activate a word to filter jobs mentioning it.",
-            }}
-          />
+          <span aria-live="polite" className="mr-1 text-xs text-gray-500">
+            Size spread: {spread.label}
+          </span>
+          <button
+            type="button"
+            onClick={() => stepSpread(-1)}
+            disabled={spreadIndex <= 0}
+            aria-label="Narrow word size spread"
+            className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+          >
+            <Minus className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => stepSpread(1)}
+            disabled={spreadIndex >= WORD_CLOUD_SPREAD_PRESETS.length - 1}
+            aria-label="Widen word size spread"
+            className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <div
+          className="flex items-center gap-1"
+          role="group"
+          aria-label="Word size granularity controls"
+        >
+          <span aria-live="polite" className="mr-1 text-xs text-gray-500">
+            Size steps: {levels.label}
+          </span>
+          <button
+            type="button"
+            onClick={() => stepLevels(-1)}
+            disabled={levelIndex <= 0}
+            aria-label="Fewer word size steps"
+            className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+          >
+            <Minus className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => stepLevels(1)}
+            disabled={levelIndex >= WORD_CLOUD_LEVEL_PRESETS.length - 1}
+            aria-label="More word size steps"
+            className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 transition-colors hover:border-blue-400 disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       </div>
+      <WordCloud
+        key={signature}
+        words={words}
+        width={CLOUD_WIDTH}
+        height={CLOUD_HEIGHT}
+        timeInterval={16}
+        spiral="archimedean"
+        padding={CLOUD_PADDING}
+        font="Inter, ui-sans-serif, system-ui, sans-serif"
+        fontSize={fontSize}
+        rotate={NO_ROTATION}
+        fill={fill}
+        transition={reducedMotion ? "none" : "all .3s ease"}
+        enableTooltip
+        renderTooltip={renderTooltip}
+        renderWord={renderWord}
+        onWordClick={handleWordClick}
+        onWordMouseOver={handleWordMouseOver}
+        onWordMouseOut={handleWordMouseOut}
+        svgProps={{
+          className: "h-auto w-full",
+          role: "group",
+          "aria-label":
+            "Keyword word cloud. Activate a word to filter jobs mentioning it.",
+        }}
+      />
     </div>
   );
 }
