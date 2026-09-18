@@ -43,6 +43,9 @@ export function normalizeLocationInsightsKey(
     excludeMetros: sortedUnique(
       options.excludeMetros ? [...options.excludeMetros] : [],
     ),
+    datePosted: options.datePosted ?? null,
+    postedAfter: options.postedAfter ?? null,
+    postedBefore: options.postedBefore ?? null,
     granularity: options.granularity ?? "city",
     foldSuburbs: options.foldSuburbs === true,
     placeView: options.placeView === "small_town" ? "small_town" : "all",
@@ -63,6 +66,9 @@ export function deserializeLocationInsightsKey(
     provinces: string[];
     locationScopes: string[];
     excludeMetros: string[];
+    datePosted?: LocationInsightsQueryOptions["datePosted"] | null;
+    postedAfter?: string | null;
+    postedBefore?: string | null;
     granularity: LocationInsightsQueryOptions["granularity"];
     foldSuburbs?: boolean;
     placeView?: LocationInsightsQueryOptions["placeView"];
@@ -81,6 +87,9 @@ export function deserializeLocationInsightsKey(
     excludeMetros: parsed.excludeMetros.length
       ? parsed.excludeMetros
       : undefined,
+    ...(parsed.datePosted ? { datePosted: parsed.datePosted } : {}),
+    ...(parsed.postedAfter ? { postedAfter: parsed.postedAfter } : {}),
+    ...(parsed.postedBefore ? { postedBefore: parsed.postedBefore } : {}),
     granularity: parsed.granularity ?? "city",
     ...(parsed.foldSuburbs === true ? { foldSuburbs: true as const } : {}),
     ...(parsed.placeView === "small_town" ? { placeView: "small_town" as const } : {}),

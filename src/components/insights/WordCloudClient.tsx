@@ -54,7 +54,13 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-function KeywordTooltip({ data }: { data: TooltipRendererData }) {
+function KeywordTooltip({
+  data,
+  lines,
+}: {
+  data: TooltipRendererData;
+  lines?: readonly string[];
+}) {
   const { refs, floatingStyles } = useTooltip({ data, placement: "top" });
   if (!data.word) return null;
   /* eslint-disable react-hooks/refs -- useTooltip exposes callback refs and computed styles as render props. */
@@ -74,14 +80,22 @@ function KeywordTooltip({ data }: { data: TooltipRendererData }) {
         ...floatingStyles,
       }}
     >
-      <span style={{ fontWeight: 600 }}>{data.word.text}</span>
-      <span style={{ opacity: 0.75 }}> — {pluralize(data.word.value)}</span>
+      {lines?.length ? (
+        lines.map((line, index) => (
+          <div key={`${index}:${line}`} style={{ fontWeight: index === 0 ? 600 : 400, opacity: index === 0 ? 1 : 0.82 }}>
+            {line}
+          </div>
+        ))
+      ) : (
+        <>
+          <span style={{ fontWeight: 600 }}>{data.word.text}</span>
+          <span style={{ opacity: 0.75 }}> — {pluralize(data.word.value)}</span>
+        </>
+      )}
     </div>
   );
   /* eslint-enable react-hooks/refs */
 }
-
-const renderTooltip: TooltipRenderer = (data) => <KeywordTooltip data={data} />;
 
 type AccessibleWordProps = {
   data: WordRendererData;
@@ -89,6 +103,7 @@ type AccessibleWordProps = {
   opacity: number;
   reducedMotion: boolean;
   animationDelay: number;
+  accessibleLabel?: string;
   onSelect: () => void;
 };
 
@@ -98,9 +113,10 @@ function AccessibleWord({
   opacity,
   reducedMotion,
   animationDelay,
+  accessibleLabel,
   onSelect,
 }: AccessibleWordProps) {
-  const label = `${data.text}, ${pluralize(data.value)}`;
+  const label = accessibleLabel ?? `${data.text}, ${pluralize(data.value)}`;
   return (
     <g
       tabIndex={0}
@@ -160,12 +176,14 @@ type WordCloudClientProps = {
   keywords: KeywordInsight[];
   selectedKeyword?: string;
   onWordClick?: (keyword: string, category: string) => void;
+  tooltipDetails?: Readonly<Record<string, readonly string[]>>;
 };
 
 export default function WordCloudClient({
   keywords,
   selectedKeyword,
   onWordClick,
+  tooltipDetails,
 }: WordCloudClientProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -276,6 +294,7 @@ export default function WordCloudClient({
           opacity={opacity}
           reducedMotion={reducedMotion}
           animationDelay={getWordAnimationDelay(data.index)}
+          accessibleLabel={tooltipDetails?.[data.text]?.join(", ")}
           onSelect={() => {
             const keyword = keywords[data.index];
             if (keyword) onWordClick?.(keyword.keyword, keyword.category);
@@ -283,7 +302,16 @@ export default function WordCloudClient({
         />
       );
     },
-    [isDimmed, keywords, onWordClick, opacityOf, reducedMotion],
+    [isDimmed, keywords, onWordClick, opacityOf, reducedMotion, tooltipDetails],
+  );
+  const renderTooltip: TooltipRenderer = useCallback(
+    (data) => (
+      <KeywordTooltip
+        data={data}
+        lines={data.word ? tooltipDetails?.[data.word.text] : undefined}
+      />
+    ),
+    [tooltipDetails],
   );
 
   const handleWordClick = useCallback(

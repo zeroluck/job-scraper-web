@@ -19,9 +19,13 @@ import {
 import { CANONICAL_ARCHETYPES, archetypeLabel } from "@/lib/archetypes/registry";
 
 const INSIGHTS_FILTERS = ROUTE_FILTERS["/insights"];
+const NON_LOCATION_INSIGHTS_FILTERS = INSIGHTS_FILTERS.filter(
+  (filter) => filter !== "datePosted",
+);
 const KNOWN_ARCHETYPES = CANONICAL_ARCHETYPES;
 
-function InsightsHeader() {
+function InsightsHeader({ isLocation }: { isLocation: boolean }) {
+  const supportedFilters = isLocation ? INSIGHTS_FILTERS : NON_LOCATION_INSIGHTS_FILTERS;
   return (
     <>
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -43,14 +47,14 @@ function InsightsHeader() {
           }
         >
           <FilterButton
-            supportedFilters={INSIGHTS_FILTERS}
+            supportedFilters={supportedFilters}
             knownArchetypes={KNOWN_ARCHETYPES}
           />
         </Suspense>
       </div>
       <Suspense fallback={null}>
         <FilterChips
-          supportedFilters={INSIGHTS_FILTERS}
+          supportedFilters={supportedFilters}
           knownArchetypes={KNOWN_ARCHETYPES}
         />
       </Suspense>
@@ -397,6 +401,9 @@ export default async function InsightsPage({
     provinces: filters.province,
     locationScopes: filters.locationScope,
     excludeMetros: filters.excludeMetro,
+    datePosted: activeCategory === "location" ? filters.datePosted : undefined,
+    postedAfter: activeCategory === "location" ? filters.postedAfter : undefined,
+    postedBefore: activeCategory === "location" ? filters.postedBefore : undefined,
     category: activeCategory,
     minCount: 2,
     limit: INSIGHTS_KEYWORD_LIMIT,
@@ -407,7 +414,7 @@ export default async function InsightsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <InsightsHeader />
+      <InsightsHeader isLocation={activeCategory === "location"} />
       <Suspense key={key} fallback={<InsightsSkeleton />}>
         <InsightsResults
           filtersKey={key}

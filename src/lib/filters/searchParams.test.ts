@@ -203,6 +203,8 @@ test("rejects malformed scalar values and unknown enums", () => {
     minRepostCount: undefined,
     minSeenCount: undefined,
     datePosted: undefined,
+    postedAfter: undefined,
+    postedBefore: undefined,
     applicationStatus: undefined,
     company: undefined,
     jobTitle: undefined,
@@ -305,6 +307,25 @@ test("parses location category and granularity, rejects invalid loc", () => {
     parseFilterSearchParams({ category: "location" }).loc,
     undefined,
   );
+});
+
+test("parses valid posted date bounds and rejects invalid ranges", () => {
+  const valid = parseFilterSearchParams({
+    postedAfter: "2026-02-28",
+    postedBefore: "2026-03-01",
+  });
+  assert.equal(valid.postedAfter, "2026-02-28");
+  assert.equal(valid.postedBefore, "2026-03-01");
+
+  const invalidDate = parseFilterSearchParams({ postedAfter: "2026-02-30" });
+  assert.equal(invalidDate.postedAfter, undefined);
+
+  const inverted = parseFilterSearchParams({
+    postedAfter: "2026-03-02",
+    postedBefore: "2026-03-01",
+  });
+  assert.equal(inverted.postedAfter, undefined);
+  assert.equal(inverted.postedBefore, undefined);
 });
 
 test("parses fold and percap display switches, rejects invalid values", () => {

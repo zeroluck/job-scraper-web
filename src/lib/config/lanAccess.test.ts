@@ -22,7 +22,7 @@ test("configuration API is available without the removed admin authentication ga
 });
 
 test("unauthenticated configuration writes retain same-origin and JSON safeguards", () => {
-  assert.match(route, /origin === new URL\(request\.url\)\.origin/);
+  assert.match(route, /headers\.get\("host"\)/);
   assert.match(route, /Cross-origin configuration updates are not allowed/);
   assert.match(route, /application\/json/);
   assert.match(repository, /createSupabaseServiceClient\(\)/);

@@ -284,6 +284,68 @@ export default function JobFiltersSidebar({
             </FilterSection>
           )}
 
+          {supportedFilters.includes("datePosted") && (
+            <FilterSection label="Date posted">
+              <RadioList
+                name="datePosted"
+                value={filters.datePosted}
+                options={DATE_OPTIONS.filter((option) =>
+                  DATE_POSTED_VALUES.includes(option.value)
+                )}
+                emptyLabel="All time"
+                onChange={(value) =>
+                  updateDraft((next) => {
+                    if (value) next.set("datePosted", value);
+                    else next.delete("datePosted");
+                    if (value) {
+                      next.delete("postedAfter");
+                      next.delete("postedBefore");
+                    }
+                  })
+                }
+              />
+              {pathname === "/insights" && (
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-200 pt-4">
+                  <label className="text-xs font-medium text-gray-600">
+                    Posted from
+                    <input
+                      type="date"
+                      value={filters.postedAfter ?? ""}
+                      max={filters.postedBefore}
+                      onChange={(event) =>
+                        updateDraft((next) => {
+                          next.delete("datePosted");
+                          if (event.target.value) next.set("postedAfter", event.target.value);
+                          else next.delete("postedAfter");
+                        })
+                      }
+                      className={`${inputClass} mt-1`}
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-gray-600">
+                    Posted through
+                    <input
+                      type="date"
+                      value={filters.postedBefore ?? ""}
+                      min={filters.postedAfter}
+                      onChange={(event) =>
+                        updateDraft((next) => {
+                          next.delete("datePosted");
+                          if (event.target.value) next.set("postedBefore", event.target.value);
+                          else next.delete("postedBefore");
+                        })
+                      }
+                      className={`${inputClass} mt-1`}
+                    />
+                  </label>
+                  <p className="col-span-2 text-xs text-gray-500">
+                    Bounds use the effective posting date and include the full through date.
+                  </p>
+                </div>
+              )}
+            </FilterSection>
+          )}
+
           {supportedFilters.includes("interest") && (
             <FilterSection label="Interest status">
               <RadioList
@@ -435,20 +497,6 @@ export default function JobFiltersSidebar({
                 value={filters.minRepostCount}
                 minimum={0}
                 onCommit={(value) => updateScalar("minRepostCount", value)}
-              />
-            </FilterSection>
-          )}
-
-          {supportedFilters.includes("datePosted") && (
-            <FilterSection label="Date posted">
-              <RadioList
-                name="datePosted"
-                value={filters.datePosted}
-                options={DATE_OPTIONS.filter((option) =>
-                  DATE_POSTED_VALUES.includes(option.value)
-                )}
-                emptyLabel="All time"
-                onChange={(value) => updateScalar("datePosted", value)}
               />
             </FilterSection>
           )}

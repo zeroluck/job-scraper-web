@@ -39,6 +39,8 @@ const LABELS: Record<string, (value: string) => string> = {
   minRepostCount: (value) => `Repost count: at least ${value}`,
   datePosted: (value) =>
     value === "24h" ? "Last 24 hours" : value === "7d" ? "Last week" : "Last month",
+  postedAfter: (value) => `Posted from ${value}`,
+  postedBefore: (value) => `Posted through ${value}`,
   applicationStatus: (value) =>
     `Status: ${value === "offer" ? "Offer" : value[0].toUpperCase() + value.slice(1)}`,
   company: (value) => `Company: ${value}`,
@@ -160,6 +162,8 @@ function isParsedValue(
     key === "interest" ||
     key === "filterStatus" ||
     key === "datePosted" ||
+    key === "postedAfter" ||
+    key === "postedBefore" ||
     key === "applicationStatus"
   ) {
     return parsed[key] === value;

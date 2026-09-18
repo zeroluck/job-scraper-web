@@ -196,6 +196,22 @@ export default function InsightsClient({
         ? (stabilizedRate ? (k as LocationInsight).stabilized_per_100k! : k.per_100k!).toFixed(1)
         : String(k.count)
     : undefined;
+  const locationTooltipDetails = useMemo(() => {
+    if (!isLocation) return undefined;
+    return Object.fromEntries(
+      keywords.map((keyword) => {
+        const location = keyword as LocationInsight;
+        const rate = rateMode === "stabilized"
+          ? location.stabilized_per_100k
+          : location.per_100k;
+        return [keyword.keyword, [
+          `${keyword.keyword} - ${keyword.count.toLocaleString("en-CA")} openings`,
+          `${rate == null ? "Unavailable" : rate.toFixed(1)} openings per 100k`,
+          `${location.population_2021 == null ? "Unavailable" : location.population_2021.toLocaleString("en-CA")} area population`,
+        ]];
+      }),
+    );
+  }, [isLocation, keywords, rateMode]);
   const drillCopy = isLocation
     ? {
       units: totalKeywords === 1 ? "location" : "locations",
@@ -221,7 +237,12 @@ export default function InsightsClient({
     const next = new URLSearchParams(searchParams.toString());
     next.set("category", category);
     // Location granularity must not leak onto keyword tabs.
-    if (category !== "location") next.delete("loc");
+    if (category !== "location") {
+      next.delete("loc");
+      next.delete("datePosted");
+      next.delete("postedAfter");
+      next.delete("postedBefore");
+    }
     resetResultPosition(next);
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -489,26 +510,30 @@ export default function InsightsClient({
                 >
                   Per 100k residents
                 </button>
-              </div>
-            )}
-            {isLocation && perCapitaActive && (
-              <div className="mb-2 flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Rate comparison">
-                {(["raw", "stabilized"] as const).map((rate) => (
-                  <button
-                    key={rate}
-                    type="button"
-                    role="radio"
-                    aria-checked={rateMode === rate}
-                    onClick={() => selectRateMode(rate)}
-                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                      rateMode === rate
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
-                    }`}
-                  >
-                    {rate === "raw" ? "Observed (old)" : "Stabilized (new)"}
-                  </button>
-                ))}
+                {perCapitaActive && (
+                  <div className="flex items-center gap-1" role="radiogroup" aria-label="Rate comparison">
+                    {(["raw", "stabilized"] as const).map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        role="radio"
+                        aria-checked={rateMode === rate}
+                        aria-label={rate === "raw" ? "Observed" : "Stabilized"}
+                        title={rate === "raw"
+                          ? "Observed uses the actual openings divided by the displayed area population."
+                          : "Stabilized adjusts the observed rate toward the peer-area average when evidence is limited."}
+                        onClick={() => selectRateMode(rate)}
+                        className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                          rateMode === rate
+                            ? "border-blue-600 bg-blue-600 text-white"
+                            : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                        }`}
+                      >
+                        {rate === "raw" ? "Observed" : "Stabilized"}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {placeView === "small_town" && (
                   <span className="ml-1 text-xs text-gray-500">Standalone Canadian communities under 100k; CMA components excluded.</span>
                 )}
@@ -542,10 +567,11 @@ export default function InsightsClient({
               </div>
             </div>
             <WordCloudClient
-              keywords={visibleKeywords}
-              selectedKeyword={selectedKeyword}
-              onWordClick={selectKeyword}
-            />
+                keywords={visibleKeywords}
+                selectedKeyword={selectedKeyword}
+                onWordClick={selectKeyword}
+                tooltipDetails={locationTooltipDetails}
+              />
           </div>
 
           <div className="mb-4">

@@ -59,3 +59,16 @@ test("location cache key separates small-town membership", () => {
   assert.notEqual(all, small);
   assert.equal(deserializeLocationInsightsKey(small).placeView, "small_town");
 });
+
+test("location cache key separates and round-trips date bounds", () => {
+  const unbounded = normalizeLocationInsightsKey({ granularity: "city" });
+  const bounded = normalizeLocationInsightsKey({
+    granularity: "city",
+    postedAfter: "2026-09-01",
+    postedBefore: "2026-09-18",
+  });
+  assert.notEqual(unbounded, bounded);
+  const parsed = deserializeLocationInsightsKey(bounded);
+  assert.equal(parsed.postedAfter, "2026-09-01");
+  assert.equal(parsed.postedBefore, "2026-09-18");
+});

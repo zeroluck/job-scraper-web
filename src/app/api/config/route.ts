@@ -25,7 +25,10 @@ function errorResponse(error: unknown) {
 
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) return true;
+  const url = new URL(request.url);
+  const host = request.headers.get("host") ?? url.host;
+  return origin === `${url.protocol}//${host}`;
 }
 
 export async function GET() {

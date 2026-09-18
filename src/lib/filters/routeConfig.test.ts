@@ -148,6 +148,20 @@ test("location display switches stay within Insights", () => {
   assert.equal(list.get("town"), null);
 });
 
+test("custom posted bounds stay on Insights and do not leak to job lists", () => {
+  const source = params([
+    ["category", "location"],
+    ["postedAfter", "2026-09-01"],
+    ["postedBefore", "2026-09-18"],
+  ]);
+  const insights = buildRouteSearchParams(source, "/insights");
+  assert.equal(insights.get("postedAfter"), "2026-09-01");
+  assert.equal(insights.get("postedBefore"), "2026-09-18");
+  const jobs = buildRouteSearchParams(source, "/jobs/all");
+  assert.equal(jobs.get("postedAfter"), null);
+  assert.equal(jobs.get("postedBefore"), null);
+});
+
 test("invalid fold values are dropped on insights", () => {
   const source = params([
     ["category", "location"],

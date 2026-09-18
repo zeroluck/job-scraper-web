@@ -126,6 +126,8 @@ export interface FilterState<TArchetype extends string = BuiltInArchetype> {
   minRepostCount?: number;
   minSeenCount?: number;
   datePosted?: DatePosted;
+  postedAfter?: string;
+  postedBefore?: string;
   applicationStatus?: ApplicationStatus;
   company?: string[];
   jobTitle?: string[];

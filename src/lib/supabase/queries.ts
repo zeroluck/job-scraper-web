@@ -142,6 +142,9 @@ export interface KeywordInsightsQueryOptions {
   provinces?: readonly string[];
   locationScopes?: readonly string[];
   excludeMetros?: readonly string[];
+  datePosted?: FilterState["datePosted"];
+  postedAfter?: string;
+  postedBefore?: string;
   category?: string;
   minCount?: number;
   limit?: number;
@@ -219,21 +222,41 @@ function pageRange(options: InternalJobListOptions) {
   return { from, to: from + pageSize - 1 };
 }
 
-function datePostedCutoff(
-  value: InternalJobListOptions["datePosted"],
-  options: InternalJobListOptions,
-): string | undefined {
+export function resolvePostedDateBounds(
+  options: {
+    datePosted?: FilterState["datePosted"];
+    postedAfter?: string;
+    postedBefore?: string;
+  },
+): { postedAfter?: string; postedBefore?: string } {
+  const value = options.datePosted;
   const age = value === "24h" ? 24 : value === "7d" ? 24 * 7 : value === "30d" ? 24 * 30 : 0;
-  if (!age || !value) return undefined;
-  const cached = dateCutoffCache.get(options)?.[value];
-  if (cached) return cached;
-  const cutoffDate = new Date(Date.now() - age * 60 * 60 * 1000);
-  cutoffDate.setUTCSeconds(0, 0);
-  const cutoff = cutoffDate.toISOString();
-  const cutoffs = dateCutoffCache.get(options) ?? {};
-  cutoffs[value] = cutoff;
-  dateCutoffCache.set(options, cutoffs);
-  return cutoff;
+  let relativeAfter: string | undefined;
+  if (age && value) {
+    const cached = dateCutoffCache.get(options)?.[value];
+    if (cached) relativeAfter = cached;
+    else {
+      const cutoffDate = new Date(Date.now() - age * 60 * 60 * 1000);
+      cutoffDate.setUTCSeconds(0, 0);
+      relativeAfter = cutoffDate.toISOString();
+      const cutoffs = dateCutoffCache.get(options) ?? {};
+      cutoffs[value] = relativeAfter;
+      dateCutoffCache.set(options, cutoffs);
+    }
+  }
+  const absoluteAfter = options.postedAfter
+    ? `${options.postedAfter}T00:00:00.000Z`
+    : undefined;
+  const postedAfter = relativeAfter && absoluteAfter
+    ? (relativeAfter > absoluteAfter ? relativeAfter : absoluteAfter)
+    : relativeAfter ?? absoluteAfter;
+  let postedBefore: string | undefined;
+  if (options.postedBefore) {
+    const nextDay = new Date(`${options.postedBefore}T00:00:00.000Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    postedBefore = nextDay.toISOString();
+  }
+  return { postedAfter, postedBefore };
 }
 
 function applyInterestPredicate(
@@ -343,8 +366,9 @@ function applyJobPredicates(
   if (minRepostCount !== undefined) query = query.gte("repost_count", minRepostCount);
   if (minSeenCount !== undefined) query = query.gte("seen_count", minSeenCount);
 
-  const cutoff = datePostedCutoff(options.datePosted, options);
-  if (cutoff) query = query.gte("effective_posted_at", cutoff);
+  const bounds = resolvePostedDateBounds(options);
+  if (bounds.postedAfter) query = query.gte("effective_posted_at", bounds.postedAfter);
+  if (bounds.postedBefore) query = query.lt("effective_posted_at", bounds.postedBefore);
 
   return query;
 }
@@ -426,6 +450,7 @@ function jobIdRpcParams(kind: JobListKind, options: InternalJobListOptions) {
     ? requestedSort
     : DEFAULT_SORT[kind];
   const scores = scoreBounds(kind, options);
+  const bounds = resolvePostedDateBounds(options);
   return {
     p_kind: kind,
     p_provider: options.provider ?? null,
@@ -444,7 +469,7 @@ function jobIdRpcParams(kind: JobListKind, options: InternalJobListOptions) {
     p_salary_max: finiteNumber(options.salaryMax) ?? null,
     p_min_repost_count: finiteNumber(options.minRepostCount) ?? null,
     p_min_seen_count: finiteNumber(options.minSeenCount) ?? null,
-    p_posted_after: datePostedCutoff(options.datePosted, options) ?? null,
+    p_posted_after: bounds.postedAfter ?? null,
     p_sort_by: sortBy,
     p_sort_order: options.sortOrder === "asc" ? "asc" : "desc",
   };
@@ -873,6 +898,9 @@ export interface LocationInsightsQueryOptions {
   provinces?: readonly string[];
   locationScopes?: readonly string[];
   excludeMetros?: readonly string[];
+  datePosted?: FilterState["datePosted"];
+  postedAfter?: string;
+  postedBefore?: string;
   granularity?: LocationInsightsGranularity;
   /** Fold suburbs into "Greater <Metro>" (city view only). */
   foldSuburbs?: boolean;
@@ -1008,6 +1036,7 @@ export async function executeLocationInsightsQuery(
   const granularity = locationGranularityOption(options.granularity);
   const foldSuburbs = options.foldSuburbs === true;
   const placeView = locationPlaceViewOption(options.placeView);
+  const dateBounds = resolvePostedDateBounds(options);
   const params = {
     p_providers: arrayOption(options.providers, options.provider),
     p_archetypes: compatibleArchetypeValues(
@@ -1024,7 +1053,11 @@ export async function executeLocationInsightsQuery(
     p_fold_suburbs: foldSuburbs,
     p_place_view: placeView,
   };
-  const response = await supabase.rpc("get_location_insights", params);
+  const response = await supabase.rpc("get_location_insights_date_bounds", {
+    ...params,
+    p_posted_after: dateBounds.postedAfter ?? null,
+    p_posted_before: dateBounds.postedBefore ?? null,
+  });
   const rows = ((await handleResponse(response)) ?? []) as Array<{
     label?: string | null;
     count?: number | string | null;
@@ -1102,6 +1135,7 @@ export async function executeLocationJobsQuery(
 ): Promise<{ jobIds: string[]; totalCount: number }> {
   const { granularity, label, limit, offset } = locationJobsPage(options);
   const placeView = locationPlaceViewOption(options.placeView);
+  const dateBounds = resolvePostedDateBounds(options);
   const params = {
     p_providers: arrayOption(options.providers, options.provider),
     p_archetypes: compatibleArchetypeValues(
@@ -1121,7 +1155,11 @@ export async function executeLocationJobsQuery(
     p_limit: limit,
     p_offset: offset,
   };
-  const response = await supabase.rpc("get_location_job_ids", params);
+  const response = await supabase.rpc("get_location_job_ids_date_bounds", {
+    ...params,
+    p_posted_after: dateBounds.postedAfter ?? null,
+    p_posted_before: dateBounds.postedBefore ?? null,
+  });
   const rows = ((await handleResponse(response)) ?? []) as Array<{
     job_id: string | null;
     total_count?: number | string | null;

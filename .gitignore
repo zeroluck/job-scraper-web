@@ -42,3 +42,5 @@ next-env.d.ts
 
 .worktrees/
 /supabase_setup
+/.superpowers/
+/supabase/.temp/

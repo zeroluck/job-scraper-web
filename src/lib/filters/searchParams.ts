@@ -53,7 +53,7 @@ export const FILTER_PARAM_KEYS: Readonly<Record<FilterId, readonly string[]>> = 
   salaryRange: ["salaryMin", "salaryMax"],
   repostCount: ["minRepostCount"],
   seenCount: ["minSeenCount"],
-  datePosted: ["datePosted"],
+  datePosted: ["datePosted", "postedAfter", "postedBefore"],
   applicationStatus: ["applicationStatus"],
   company: ["company"],
   jobTitle: ["jobTitle"],
@@ -132,6 +132,15 @@ function pageSize(input: SearchParamsInput): 10 | 25 | 100 | undefined {
   return undefined;
 }
 
+function calendarDate(input: SearchParamsInput, key: string): string | undefined {
+  const value = values(input, key)[0];
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value
+    ? undefined
+    : value;
+}
+
 export function withSelectedJobId(
   input: URLSearchParams,
   selectedJobId: string,
@@ -159,6 +168,9 @@ export function parseFilterSearchParams(
   const maxScore = integer(input, "maxScore", 0, 100);
   const salaryMin = integer(input, "salaryMin", 0);
   const salaryMax = integer(input, "salaryMax", 0);
+  const postedAfter = calendarDate(input, "postedAfter");
+  const postedBefore = calendarDate(input, "postedBefore");
+  const validPostedRange = !postedAfter || !postedBefore || postedAfter <= postedBefore;
 
   return {
     provider: oneOf(input, "provider", PROVIDER_VALUES),
@@ -188,6 +200,8 @@ export function parseFilterSearchParams(
     minRepostCount: integer(input, "minRepostCount", 0),
     minSeenCount: integer(input, "minSeenCount", 0),
     datePosted: oneOf(input, "datePosted", DATE_POSTED_VALUES),
+    postedAfter: validPostedRange ? postedAfter : undefined,
+    postedBefore: validPostedRange ? postedBefore : undefined,
     applicationStatus: oneOf(
       input,
       "applicationStatus",

@@ -51,6 +51,7 @@ export const ROUTE_FILTERS: Record<SupportedRoute, readonly FilterId[]> = {
   ],
   "/insights": [
     "provider",
+    "datePosted",
     "archetype",
     "level",
     "filterStatus",
@@ -87,6 +88,10 @@ function allowedKeys(route: SupportedRoute): Set<string> {
   const keys = new Set<string>();
   for (const filter of ROUTE_FILTERS[route]) {
     for (const key of FILTER_PARAM_KEYS[filter]) keys.add(key);
+  }
+  if (route !== "/insights") {
+    keys.delete("postedAfter");
+    keys.delete("postedBefore");
   }
   return keys;
 }

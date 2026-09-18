@@ -44,10 +44,12 @@ test("location insights default to unfolded cities and parse census rates", asyn
     granularity: "city",
   });
 
-  assert.equal(call()?.name, "get_location_insights");
+  assert.equal(call()?.name, "get_location_insights_date_bounds");
   assert.equal(call()?.params.p_granularity, "city");
   assert.equal(call()?.params.p_fold_suburbs, false);
   assert.equal(call()?.params.p_place_view, "all");
+  assert.equal(call()?.params.p_posted_after, null);
+  assert.equal(call()?.params.p_posted_before, null);
   assert.equal(result.totalCount, 900);
   assert.deepEqual(result.keywords[0], {
     keyword: "Mississauga",
@@ -80,4 +82,14 @@ test("location insights forward the fold flag", async () => {
     foldSuburbs: true,
   });
   assert.equal(call()?.params.p_fold_suburbs, true);
+});
+
+test("location insights send inclusive calendar date bounds", async () => {
+  const { supabase, call } = stubRpc([]);
+  await executeLocationInsightsQuery(supabase, {
+    postedAfter: "2026-09-01",
+    postedBefore: "2026-09-18",
+  });
+  assert.equal(call()?.params.p_posted_after, "2026-09-01T00:00:00.000Z");
+  assert.equal(call()?.params.p_posted_before, "2026-09-19T00:00:00.000Z");
 });
