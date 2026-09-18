@@ -181,14 +181,26 @@ export default function WordCloudClient({
     const done = () => {
       if (!cancelled) setFontsReady(true);
     };
-    if (typeof document === "undefined" || !("fonts" in document)) {
+    // Never leave the cloud stuck on its skeleton: any synchronous throw
+    // (missing/neutered Font Loading API, e.g. fingerprinting shields)
+    // must fall through to ready instead of wedging the gate.
+    let fallback = 0;
+    try {
+      if (
+        typeof document === "undefined" ||
+        !("fonts" in document) ||
+        typeof document.fonts.load !== "function"
+      ) {
+        done();
+        return;
+      }
+      const specs = ["10px Inter", "32px Inter", "64px Inter", "bold 32px Inter"];
+      Promise.all(specs.map((spec) => document.fonts.load(spec).catch(() => [])))
+        .then(done, done);
+      fallback = window.setTimeout(done, 2000);
+    } catch {
       done();
-      return;
     }
-    const specs = ["10px Inter", "32px Inter", "64px Inter", "bold 32px Inter"];
-    Promise.all(specs.map((spec) => document.fonts.load(spec).catch(() => [])))
-      .then(done, done);
-    const fallback = window.setTimeout(done, 2000);
     return () => {
       cancelled = true;
       window.clearTimeout(fallback);
