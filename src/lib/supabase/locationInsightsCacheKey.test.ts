@@ -52,3 +52,10 @@ test("location cache key separates folded and unfolded city views", () => {
     undefined,
   );
 });
+
+test("location cache key separates small-town membership", () => {
+  const all = normalizeLocationInsightsKey({ granularity: "city" });
+  const small = normalizeLocationInsightsKey({ granularity: "city", placeView: "small_town" });
+  assert.notEqual(all, small);
+  assert.equal(deserializeLocationInsightsKey(small).placeView, "small_town");
+});

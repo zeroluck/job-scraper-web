@@ -1,0 +1,4 @@
+{
+  "c:moosonee|on": {"geo_match_quality": "exact"},
+  "c:invermay|sk": {"geo_match_quality": "exact"}
+}

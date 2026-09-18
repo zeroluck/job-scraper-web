@@ -11,8 +11,9 @@ import {
   LOCATION_GRANULARITY_VALUES,
   type InsightsCategory,
   type LocationGranularity,
+  type LocationRate,
 } from "@/lib/filters/types";
-import type { JobListItem, KeywordInsight } from "@/types";
+import type { JobListItem, KeywordInsight, LocationInsight } from "@/types";
 import TopMatchesList from "@/components/jobs/TopMatchesList";
 import { CATEGORY_COLORS, CATEGORY_LABELS } from "./categoryColors";
 import {
@@ -124,6 +125,8 @@ type InsightsClientProps = {
   loc?: LocationGranularity;
   foldSuburbs?: boolean;
   perCapita?: boolean;
+  rateMode?: LocationRate;
+  placeView?: "all" | "small_town";
   selectedKeyword?: string;
   keywordJobs?: JobListItem[];
   keywordTotalCount?: number;
@@ -143,6 +146,8 @@ export default function InsightsClient({
   loc = "city",
   foldSuburbs = false,
   perCapita = false,
+  rateMode = "raw",
+  placeView = "all",
   selectedKeyword,
   keywordJobs,
   keywordTotalCount,
@@ -163,24 +168,33 @@ export default function InsightsClient({
   // counts alongside the rate, so buckets without a census denominator
   // keep their raw count and sort after rated buckets.
   const perCapitaActive = isLocation && perCapita;
+  const stabilizedRate = perCapitaActive && rateMode === "stabilized";
   const displayKeywords = useMemo(() => {
     if (!perCapitaActive) return keywords;
     return keywords
-      .map((k) => (k.per_100k != null ? { ...k, count: k.per_100k } : k))
+      .map((k) => {
+        const location = k as LocationInsight;
+        const metric = stabilizedRate ? location.stabilized_per_100k : location.per_100k;
+        return metric != null ? { ...k, count: metric } : k;
+      })
       .sort((a, b) => {
-        const aRated = a.per_100k != null;
-        const bRated = b.per_100k != null;
+        const aLocation = a as LocationInsight;
+        const bLocation = b as LocationInsight;
+        const aRated = (stabilizedRate ? aLocation.stabilized_per_100k : aLocation.per_100k) != null;
+        const bRated = (stabilizedRate ? bLocation.stabilized_per_100k : bLocation.per_100k) != null;
         if (aRated !== bRated) return aRated ? -1 : 1;
         return b.count - a.count || (a.keyword < b.keyword ? -1 : 1);
       });
-  }, [keywords, perCapitaActive]);
+  }, [keywords, perCapitaActive, stabilizedRate]);
   const visibleKeywords = useMemo(
     () => displayKeywords.slice(0, visibleCount),
     [displayKeywords, visibleCount],
   );
   const formatCount = perCapitaActive
     ? (k: KeywordInsight) =>
-      k.per_100k != null ? k.per_100k.toFixed(1) : String(k.count)
+      (stabilizedRate ? (k as LocationInsight).stabilized_per_100k : k.per_100k) != null
+        ? (stabilizedRate ? (k as LocationInsight).stabilized_per_100k! : k.per_100k!).toFixed(1)
+        : String(k.count)
     : undefined;
   const drillCopy = isLocation
     ? {
@@ -219,7 +233,10 @@ export default function InsightsClient({
     next.set("loc", granularity);
     // Folding only exists in the city view; a folded province link would
     // be a lie, so drop it. Per-capita is display-only and survives.
-    if (granularity !== "city") next.delete("fold");
+    if (granularity !== "city") {
+      next.delete("fold");
+      next.delete("town");
+    }
     // A drilled label belongs to one namespace; clear it on switch.
     next.delete("keyword");
     resetResultPosition(next);
@@ -242,8 +259,39 @@ export default function InsightsClient({
 
   const selectPerCapita = (on: boolean) => {
     const next = new URLSearchParams(searchParams.toString());
-    if (on) next.set("percap", "true");
-    else next.delete("percap");
+    if (on) {
+      next.set("percap", "true");
+      next.set("rate", "stabilized");
+    } else {
+      next.delete("percap");
+      next.delete("rate");
+    }
+    resetResultPosition(next);
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const selectRateMode = (rate: LocationRate) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("percap", "true");
+    next.set("rate", rate);
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const selectSmallTown = (small: boolean) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("category", "location");
+    next.set("loc", "city");
+    if (small) {
+      next.set("town", "small");
+      next.set("percap", "true");
+      next.set("rate", "stabilized");
+      next.delete("fold");
+      next.delete("keyword");
+    } else {
+      next.delete("town");
+    }
     resetResultPosition(next);
     const query = next.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -292,7 +340,7 @@ export default function InsightsClient({
             {totalKeywords} {drillCopy.units}
           </span>
           {perCapitaActive && (
-            <span> (jobs per 100k residents, 2021 Census)</span>
+            <span> ({stabilizedRate ? "stabilized" : "observed"} jobs per 100k residents, 2021 Census)</span>
           )}
           {visualizedCount !== undefined &&
             limit !== undefined &&
@@ -412,6 +460,21 @@ export default function InsightsClient({
                     Greater metro areas
                   </button>
                 )}
+                {loc === "city" && (
+                  <button
+                    type="button"
+                    aria-pressed={placeView === "small_town"}
+                    title="Standalone Canadian communities under 100k, excluding CMA components"
+                    onClick={() => selectSmallTown(placeView !== "small_town")}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                      placeView === "small_town"
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                    }`}
+                  >
+                    Small town
+                  </button>
+                )}
                 <button
                   key="per-capita"
                   type="button"
@@ -426,6 +489,29 @@ export default function InsightsClient({
                 >
                   Per 100k residents
                 </button>
+              </div>
+            )}
+            {isLocation && perCapitaActive && (
+              <div className="mb-2 flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Rate comparison">
+                {(["raw", "stabilized"] as const).map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    role="radio"
+                    aria-checked={rateMode === rate}
+                    onClick={() => selectRateMode(rate)}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                      rateMode === rate
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                    }`}
+                  >
+                    {rate === "raw" ? "Observed (old)" : "Stabilized (new)"}
+                  </button>
+                ))}
+                {placeView === "small_town" && (
+                  <span className="ml-1 text-xs text-gray-500">Standalone Canadian communities under 100k; CMA components excluded.</span>
+                )}
               </div>
             )}
             <div

@@ -3,6 +3,7 @@ import type {
   JobListItem,
   JobKeywordInsight as SharedJobKeywordInsight,
   KeywordInsight,
+  LocationInsight,
   Resume,
 } from "../../types.ts";
 import type { PostgrestError } from "@supabase/supabase-js";
@@ -858,6 +859,7 @@ export interface KeywordJobsQueryOptions extends KeywordInsightsQueryOptions {
 }
 
 export type LocationInsightsGranularity = "city" | "province";
+export type LocationPlaceView = "all" | "small_town";
 
 export interface LocationInsightsQueryOptions {
   provider?: string | readonly string[];
@@ -874,10 +876,11 @@ export interface LocationInsightsQueryOptions {
   granularity?: LocationInsightsGranularity;
   /** Fold suburbs into "Greater <Metro>" (city view only). */
   foldSuburbs?: boolean;
+  placeView?: LocationPlaceView;
 }
 
 export interface LocationInsightsResult {
-  keywords: KeywordInsight[];
+  keywords: LocationInsight[];
   totalCount: number;
   granularity: LocationInsightsGranularity;
 }
@@ -992,13 +995,20 @@ function locationGranularityOption(
   return granularity === "province" ? "province" : "city";
 }
 
+function locationPlaceViewOption(
+  placeView: LocationInsightsQueryOptions["placeView"],
+): LocationPlaceView {
+  return placeView === "small_town" ? "small_town" : "all";
+}
+
 export async function executeLocationInsightsQuery(
   supabase: any,
   options: LocationInsightsQueryOptions = {},
 ): Promise<LocationInsightsResult> {
   const granularity = locationGranularityOption(options.granularity);
   const foldSuburbs = options.foldSuburbs === true;
-  const response = await supabase.rpc("get_location_insights", {
+  const placeView = locationPlaceViewOption(options.placeView);
+  const params = {
     p_providers: arrayOption(options.providers, options.provider),
     p_archetypes: compatibleArchetypeValues(
       arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
@@ -1012,7 +1022,9 @@ export async function executeLocationInsightsQuery(
     p_exclude_metros: nonEmpty(options.excludeMetros),
     p_granularity: granularity,
     p_fold_suburbs: foldSuburbs,
-  });
+    p_place_view: placeView,
+  };
+  const response = await supabase.rpc("get_location_insights", params);
   const rows = ((await handleResponse(response)) ?? []) as Array<{
     label?: string | null;
     count?: number | string | null;
@@ -1020,16 +1032,22 @@ export async function executeLocationInsightsQuery(
     last_updated?: string | null;
     population_2021?: number | string | null;
     per_100k?: number | string | null;
+    stabilized_per_100k?: number | string | null;
+    rate_reliability?: number | string | null;
+    geo_match_quality?: LocationInsight["geo_match_quality"];
+    is_cma_component?: boolean | null;
   }>;
 
   const parsedTotal = Number(rows[0]?.total_count);
   const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
   // Labels arrive display-ready from the RPC (metros, cities, scope
   // buckets); the client passes them through untouched.
-  const keywords: KeywordInsight[] = rows.flatMap((row) => {
+  const keywords: LocationInsight[] = rows.flatMap((row) => {
     if (typeof row.label !== "string" || !row.label) return [];
     const population = row.population_2021 == null ? NaN : Number(row.population_2021);
     const perCapita = row.per_100k == null ? NaN : Number(row.per_100k);
+    const stabilized = row.stabilized_per_100k == null ? NaN : Number(row.stabilized_per_100k);
+    const reliability = row.rate_reliability == null ? NaN : Number(row.rate_reliability);
     return [{
       keyword: row.label,
       category: "location",
@@ -1037,6 +1055,10 @@ export async function executeLocationInsightsQuery(
       last_updated: row.last_updated ?? null,
       population_2021: Number.isFinite(population) ? population : null,
       per_100k: Number.isFinite(perCapita) ? perCapita : null,
+      stabilized_per_100k: Number.isFinite(stabilized) ? stabilized : null,
+      rate_reliability: Number.isFinite(reliability) ? reliability : null,
+      geo_match_quality: row.geo_match_quality ?? null,
+      is_cma_component: row.is_cma_component ?? null,
     }];
   });
   return { keywords, totalCount, granularity };
@@ -1079,7 +1101,8 @@ export async function executeLocationJobsQuery(
   options: LocationJobsQueryOptions,
 ): Promise<{ jobIds: string[]; totalCount: number }> {
   const { granularity, label, limit, offset } = locationJobsPage(options);
-  const response = await supabase.rpc("get_location_job_ids", {
+  const placeView = locationPlaceViewOption(options.placeView);
+  const params = {
     p_providers: arrayOption(options.providers, options.provider),
     p_archetypes: compatibleArchetypeValues(
       arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
@@ -1093,10 +1116,12 @@ export async function executeLocationJobsQuery(
     p_exclude_metros: nonEmpty(options.excludeMetros),
     p_granularity: granularity,
     p_fold_suburbs: options.foldSuburbs === true,
+    p_place_view: placeView,
     p_label: label,
     p_limit: limit,
     p_offset: offset,
-  });
+  };
+  const response = await supabase.rpc("get_location_job_ids", params);
   const rows = ((await handleResponse(response)) ?? []) as Array<{
     job_id: string | null;
     total_count?: number | string | null;

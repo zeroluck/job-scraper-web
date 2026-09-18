@@ -89,6 +89,8 @@ async function InsightsResults({
   locationGranularity,
   foldSuburbs,
   perCapita,
+  rateMode,
+  placeView,
 }: {
   filtersKey: string;
   scopeLabel: string;
@@ -100,6 +102,8 @@ async function InsightsResults({
   locationGranularity?: LocationInsightsGranularity;
   foldSuburbs?: boolean;
   perCapita?: boolean;
+  rateMode?: "raw" | "stabilized";
+  placeView?: "all" | "small_town";
 }) {
   void filtersKey;
   if (locationGranularity) {
@@ -110,6 +114,8 @@ async function InsightsResults({
         granularity={locationGranularity}
         foldSuburbs={foldSuburbs === true}
         perCapita={perCapita === true}
+        rateMode={rateMode ?? "raw"}
+        placeView={placeView ?? "all"}
         selectedKeyword={selectedKeyword}
         keywordPage={keywordPage}
         keywordPageSize={keywordPageSize}
@@ -264,6 +270,8 @@ async function LocationResults({
   granularity,
   foldSuburbs,
   perCapita,
+  rateMode,
+  placeView,
   selectedKeyword,
   keywordPage,
   keywordPageSize,
@@ -273,6 +281,8 @@ async function LocationResults({
   granularity: LocationInsightsGranularity;
   foldSuburbs: boolean;
   perCapita: boolean;
+  rateMode: "raw" | "stabilized";
+  placeView: "all" | "small_town";
   selectedKeyword?: string;
   keywordPage: number;
   keywordPageSize: 10 | 25 | 100;
@@ -284,7 +294,7 @@ async function LocationResults({
   let result: Awaited<ReturnType<typeof getCachedLocationInsights>> | undefined;
   let errorMessage: string | undefined;
   try {
-    result = await getCachedLocationInsights({ ...locationFilters, granularity, foldSuburbs });
+    result = await getCachedLocationInsights({ ...locationFilters, granularity, foldSuburbs, placeView });
   } catch (error) {
     errorMessage =
       error instanceof Error ? error.message : "Failed to load location insights.";
@@ -313,6 +323,7 @@ async function LocationResults({
         ...locationFilters,
         granularity,
         foldSuburbs,
+        placeView,
         label: validSelection,
         page: keywordPage,
         pageSize: keywordPageSize,
@@ -335,6 +346,8 @@ async function LocationResults({
       loc={granularity}
       foldSuburbs={foldSuburbs}
       perCapita={perCapita}
+      rateMode={rateMode}
+      placeView={placeView}
       selectedKeyword={validSelection}
       keywordJobs={jobsResult?.jobs}
       keywordTotalCount={jobsResult?.totalCount}
@@ -366,6 +379,10 @@ export default async function InsightsPage({
     ? filters.fold === "greater"
     : false;
   const perCapita = filters.perCapita === true;
+  const rateMode = filters.rate === "stabilized" ? "stabilized" : "raw";
+  const placeView = activeCategory === "location" && loc === "city" && filters.town === "small"
+    ? "small_town"
+    : "all";
   const rawNavigation = parseFilterSearchParams(rawParams);
   const keywordPage = parsePageParam(rawParams) ?? 1;
   const keywordPageSize = rawNavigation.pageSize ?? 25;
@@ -403,6 +420,8 @@ export default async function InsightsPage({
           locationGranularity={activeCategory === "location" ? loc : undefined}
           foldSuburbs={foldSuburbs}
           perCapita={perCapita}
+          rateMode={rateMode}
+          placeView={placeView}
         />
       </Suspense>
     </div>

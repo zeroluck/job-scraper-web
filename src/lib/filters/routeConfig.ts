@@ -6,6 +6,8 @@ import {
   INSIGHTS_CATEGORY_VALUES,
   LOCATION_FOLD_VALUES,
   LOCATION_GRANULARITY_VALUES,
+  LOCATION_RATE_VALUES,
+  LOCATION_TOWN_VALUES,
   type FilterId,
   type SortField,
 } from "./types.ts";
@@ -175,6 +177,14 @@ export function buildRouteSearchParams(
     }
     if (sourceValues(source, "percap")[0] === "true") {
       next.set("percap", "true");
+    }
+    const rate = sourceValues(source, "rate")[0];
+    if (rate && (LOCATION_RATE_VALUES as readonly string[]).includes(rate)) {
+      next.set("rate", rate);
+    }
+    const town = sourceValues(source, "town")[0];
+    if (town && (LOCATION_TOWN_VALUES as readonly string[]).includes(town)) {
+      next.set("town", town);
     }
   }
   return next;

@@ -82,6 +82,12 @@ export type LocationGranularity = (typeof LOCATION_GRANULARITY_VALUES)[number];
 export const LOCATION_FOLD_VALUES = ["greater"] as const;
 export type LocationFold = (typeof LOCATION_FOLD_VALUES)[number];
 
+export const LOCATION_RATE_VALUES = ["raw", "stabilized"] as const;
+export type LocationRate = (typeof LOCATION_RATE_VALUES)[number];
+
+export const LOCATION_TOWN_VALUES = ["small"] as const;
+export type LocationTown = (typeof LOCATION_TOWN_VALUES)[number];
+
 export const APPLICATION_STATUS_VALUES = [
   "applied",
   "interviewing",
@@ -126,11 +132,13 @@ export interface FilterState<TArchetype extends string = BuiltInArchetype> {
   province?: ProvinceCode[];
   locationScope?: LocationScope[];
   excludeMetro?: MetroCode[];
-    category?: InsightsCategory;
-    keyword?: string;
-    loc?: LocationGranularity;
-    fold?: LocationFold;
-    perCapita?: true;
+  category?: InsightsCategory;
+  keyword?: string;
+  loc?: LocationGranularity;
+  fold?: LocationFold;
+  perCapita?: true;
+  rate?: LocationRate;
+  town?: LocationTown;
   query?: string;
   sortBy?: SortField;
   sortOrder?: SortOrder;

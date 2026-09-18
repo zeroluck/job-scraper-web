@@ -25,6 +25,16 @@ export interface KeywordInsight {
   per_100k?: number | null;
 }
 
+export interface LocationInsight extends KeywordInsight {
+  category: "location";
+  population_2021: number | null;
+  per_100k: number | null;
+  stabilized_per_100k: number | null;
+  rate_reliability: number | null;
+  geo_match_quality: "exact" | "parent" | "cross_province" | "region" | "foreign" | "unknown" | null;
+  is_cma_component: boolean | null;
+}
+
 export interface ListingInstance {
   job_id: string;
   location?: string | null;

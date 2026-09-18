@@ -111,3 +111,28 @@ order by count desc limit 15;
 
 Aggregate checksums (city level) for the 2021 seed: 448 rows,
 SUM(population_2021) = 62702732, SUM(length(bucket)) = 6618.
+
+## 6. CMA/CA membership and stabilized rates
+
+Table **98-10-0003-01** supplies the CMA/CA hierarchy. Run
+`python3 scripts/census/enrich_location_geographies.py --output /tmp/census_geo.sql`
+and apply the generated reviewable SQL after checking its audit. `2021S0503...`
+parents are CMAs; `2021S0504...` parents are CAs; following `2021A0005...`
+CSD rows inherit the latest parent. CMA components are excluded from Small town.
+
+Small town means city buckets with an exact/parent Canada census match,
+population under 100000, and no CMA membership. It intentionally keeps one-job
+communities; displayed rates use credibility stabilization:
+
+```text
+(jobs + pooled_rate * prior_population) / (population + prior_population)
+```
+
+The current implementation computes a filtered pooled rate separately for city,
+metro, and province buckets and uses a 50000-person credibility prior. Scope
+buckets retain their observed rate. Review rank deltas before changing that
+prior. The observed `per_100k` field remains the legacy, unadjusted rate.
+
+`202609180015_statcan_cma_membership.sql` contains the audited 2021 membership
+for all 448 seeded city buckets: 212 CMA components, 86 CA components, and 150
+places outside CMA/CA. Regenerate it when replacing the census seed.

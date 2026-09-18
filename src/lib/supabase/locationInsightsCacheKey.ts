@@ -45,6 +45,7 @@ export function normalizeLocationInsightsKey(
     ),
     granularity: options.granularity ?? "city",
     foldSuburbs: options.foldSuburbs === true,
+    placeView: options.placeView === "small_town" ? "small_town" : "all",
   };
   return JSON.stringify(normalized);
 }
@@ -64,6 +65,7 @@ export function deserializeLocationInsightsKey(
     excludeMetros: string[];
     granularity: LocationInsightsQueryOptions["granularity"];
     foldSuburbs?: boolean;
+    placeView?: LocationInsightsQueryOptions["placeView"];
   };
   return {
     providers: parsed.providers.length ? parsed.providers : undefined,
@@ -81,5 +83,6 @@ export function deserializeLocationInsightsKey(
       : undefined,
     granularity: parsed.granularity ?? "city",
     ...(parsed.foldSuburbs === true ? { foldSuburbs: true as const } : {}),
+    ...(parsed.placeView === "small_town" ? { placeView: "small_town" as const } : {}),
   };
 }

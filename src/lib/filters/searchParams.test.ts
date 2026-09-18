@@ -214,6 +214,8 @@ test("rejects malformed scalar values and unknown enums", () => {
     loc: undefined,
     fold: undefined,
     perCapita: undefined,
+    rate: undefined,
+    town: undefined,
     query: undefined,
     sortBy: undefined,
     sortOrder: undefined,
@@ -326,4 +328,9 @@ test("parses fold and percap display switches, rejects invalid values", () => {
     parseFilterSearchParams({}).perCapita,
     undefined,
   );
+  assert.equal(parseFilterSearchParams({ rate: "raw" }).rate, "raw");
+  assert.equal(parseFilterSearchParams({ rate: "stabilized" }).rate, "stabilized");
+  assert.equal(parseFilterSearchParams({ rate: "new" }).rate, undefined);
+  assert.equal(parseFilterSearchParams({ town: "small" }).town, "small");
+  assert.equal(parseFilterSearchParams({ town: "large" }).town, undefined);
 });
