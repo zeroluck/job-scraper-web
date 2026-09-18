@@ -19,6 +19,10 @@ export interface KeywordInsight {
   archetype?: string;
   count: number;
   last_updated?: string | null;
+  /** 2021 Census denominator; null when no geography matches. */
+  population_2021?: number | null;
+  /** Jobs per 100k residents; null without a denominator. */
+  per_100k?: number | null;
 }
 
 export interface ListingInstance {

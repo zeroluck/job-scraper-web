@@ -44,6 +44,7 @@ export function normalizeLocationInsightsKey(
       options.excludeMetros ? [...options.excludeMetros] : [],
     ),
     granularity: options.granularity ?? "city",
+    foldSuburbs: options.foldSuburbs === true,
   };
   return JSON.stringify(normalized);
 }
@@ -62,6 +63,7 @@ export function deserializeLocationInsightsKey(
     locationScopes: string[];
     excludeMetros: string[];
     granularity: LocationInsightsQueryOptions["granularity"];
+    foldSuburbs?: boolean;
   };
   return {
     providers: parsed.providers.length ? parsed.providers : undefined,
@@ -78,5 +80,6 @@ export function deserializeLocationInsightsKey(
       ? parsed.excludeMetros
       : undefined,
     granularity: parsed.granularity ?? "city",
+    ...(parsed.foldSuburbs === true ? { foldSuburbs: true as const } : {}),
   };
 }

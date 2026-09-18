@@ -77,6 +77,11 @@ export type InsightsCategory = (typeof INSIGHTS_CATEGORY_VALUES)[number];
 export const LOCATION_GRANULARITY_VALUES = ["city", "province"] as const;
 export type LocationGranularity = (typeof LOCATION_GRANULARITY_VALUES)[number];
 
+// City view only: fold suburbs/satellites into "Greater <Metro>" labels.
+// Absent by default (unfolded). Province view ignores it server-side.
+export const LOCATION_FOLD_VALUES = ["greater"] as const;
+export type LocationFold = (typeof LOCATION_FOLD_VALUES)[number];
+
 export const APPLICATION_STATUS_VALUES = [
   "applied",
   "interviewing",
@@ -121,9 +126,11 @@ export interface FilterState<TArchetype extends string = BuiltInArchetype> {
   province?: ProvinceCode[];
   locationScope?: LocationScope[];
   excludeMetro?: MetroCode[];
-  category?: InsightsCategory;
-  keyword?: string;
-  loc?: LocationGranularity;
+    category?: InsightsCategory;
+    keyword?: string;
+    loc?: LocationGranularity;
+    fold?: LocationFold;
+    perCapita?: true;
   query?: string;
   sortBy?: SortField;
   sortOrder?: SortOrder;

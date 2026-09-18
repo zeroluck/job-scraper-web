@@ -212,6 +212,8 @@ test("rejects malformed scalar values and unknown enums", () => {
     category: undefined,
     keyword: undefined,
     loc: undefined,
+    fold: undefined,
+    perCapita: undefined,
     query: undefined,
     sortBy: undefined,
     sortOrder: undefined,
@@ -299,6 +301,29 @@ test("parses location category and granularity, rejects invalid loc", () => {
   );
   assert.equal(
     parseFilterSearchParams({ category: "location" }).loc,
+    undefined,
+  );
+});
+
+test("parses fold and percap display switches, rejects invalid values", () => {
+  assert.equal(
+    parseFilterSearchParams({ fold: "greater" }).fold,
+    "greater",
+  );
+  assert.equal(
+    parseFilterSearchParams({ fold: "everything" }).fold,
+    undefined,
+  );
+  assert.equal(
+    parseFilterSearchParams({ percap: "true" }).perCapita,
+    true,
+  );
+  assert.equal(
+    parseFilterSearchParams({ percap: "1" }).perCapita,
+    undefined,
+  );
+  assert.equal(
+    parseFilterSearchParams({}).perCapita,
     undefined,
   );
 });

@@ -126,3 +126,29 @@ test("invalid loc values are dropped on insights", () => {
   assert.equal(insights.get("category"), "location");
   assert.equal(insights.get("loc"), null);
 });
+
+test("fold and percap display switches stay within Insights", () => {
+  const source = params([
+    ["category", "location"],
+    ["loc", "city"],
+    ["fold", "greater"],
+    ["percap", "true"],
+  ]);
+  const insights = buildRouteSearchParams(source, "/insights");
+  assert.equal(insights.get("fold"), "greater");
+  assert.equal(insights.get("percap"), "true");
+  const list = buildRouteSearchParams(source, "/jobs/all");
+  assert.equal(list.get("fold"), null);
+  assert.equal(list.get("percap"), null);
+});
+
+test("invalid fold values are dropped on insights", () => {
+  const source = params([
+    ["category", "location"],
+    ["fold", "everything"],
+    ["percap", "1"],
+  ]);
+  const insights = buildRouteSearchParams(source, "/insights");
+  assert.equal(insights.get("fold"), null);
+  assert.equal(insights.get("percap"), null);
+});

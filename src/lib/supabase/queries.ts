@@ -872,6 +872,8 @@ export interface LocationInsightsQueryOptions {
   locationScopes?: readonly string[];
   excludeMetros?: readonly string[];
   granularity?: LocationInsightsGranularity;
+  /** Fold suburbs into "Greater <Metro>" (city view only). */
+  foldSuburbs?: boolean;
 }
 
 export interface LocationInsightsResult {
@@ -995,6 +997,7 @@ export async function executeLocationInsightsQuery(
   options: LocationInsightsQueryOptions = {},
 ): Promise<LocationInsightsResult> {
   const granularity = locationGranularityOption(options.granularity);
+  const foldSuburbs = options.foldSuburbs === true;
   const response = await supabase.rpc("get_location_insights", {
     p_providers: arrayOption(options.providers, options.provider),
     p_archetypes: compatibleArchetypeValues(
@@ -1008,28 +1011,34 @@ export async function executeLocationInsightsQuery(
     p_location_scopes: nonEmpty(options.locationScopes),
     p_exclude_metros: nonEmpty(options.excludeMetros),
     p_granularity: granularity,
+    p_fold_suburbs: foldSuburbs,
   });
   const rows = ((await handleResponse(response)) ?? []) as Array<{
     label?: string | null;
     count?: number | string | null;
     total_count?: number | string | null;
     last_updated?: string | null;
+    population_2021?: number | string | null;
+    per_100k?: number | string | null;
   }>;
 
   const parsedTotal = Number(rows[0]?.total_count);
   const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
   // Labels arrive display-ready from the RPC (metros, cities, scope
   // buckets); the client passes them through untouched.
-  const keywords: KeywordInsight[] = rows.flatMap((row) =>
-    typeof row.label === "string" && row.label
-      ? [{
-        keyword: row.label,
-        category: "location",
-        count: Number(row.count) || 0,
-        last_updated: row.last_updated ?? null,
-      }]
-      : [],
-  );
+  const keywords: KeywordInsight[] = rows.flatMap((row) => {
+    if (typeof row.label !== "string" || !row.label) return [];
+    const population = row.population_2021 == null ? NaN : Number(row.population_2021);
+    const perCapita = row.per_100k == null ? NaN : Number(row.per_100k);
+    return [{
+      keyword: row.label,
+      category: "location",
+      count: Number(row.count) || 0,
+      last_updated: row.last_updated ?? null,
+      population_2021: Number.isFinite(population) ? population : null,
+      per_100k: Number.isFinite(perCapita) ? perCapita : null,
+    }];
+  });
   return { keywords, totalCount, granularity };
 }
 
@@ -1083,6 +1092,7 @@ export async function executeLocationJobsQuery(
     p_location_scopes: nonEmpty(options.locationScopes),
     p_exclude_metros: nonEmpty(options.excludeMetros),
     p_granularity: granularity,
+    p_fold_suburbs: options.foldSuburbs === true,
     p_label: label,
     p_limit: limit,
     p_offset: offset,

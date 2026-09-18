@@ -4,6 +4,7 @@ import {
 } from "./searchParams.ts";
 import {
   INSIGHTS_CATEGORY_VALUES,
+  LOCATION_FOLD_VALUES,
   LOCATION_GRANULARITY_VALUES,
   type FilterId,
   type SortField,
@@ -160,12 +161,20 @@ export function buildRouteSearchParams(
     }
     // Location granularity only lives on /insights; job-list routes never
     // see it (it is not a filter key, so the allowlist above excludes it).
+    // Same for the city fold toggle and the per-capita display switch.
     const loc = sourceValues(source, "loc")[0];
     if (
       loc &&
       (LOCATION_GRANULARITY_VALUES as readonly string[]).includes(loc)
     ) {
       next.set("loc", loc);
+    }
+    const fold = sourceValues(source, "fold")[0];
+    if (fold && (LOCATION_FOLD_VALUES as readonly string[]).includes(fold)) {
+      next.set("fold", fold);
+    }
+    if (sourceValues(source, "percap")[0] === "true") {
+      next.set("percap", "true");
     }
   }
   return next;

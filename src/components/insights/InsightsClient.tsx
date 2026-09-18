@@ -57,11 +57,14 @@ function Legend() {
 function TopList({
   keywords,
   limit = 20,
+  formatCount,
 }: {
   keywords: KeywordInsight[];
   limit?: number;
+  formatCount?: (keyword: KeywordInsight) => string;
 }) {
   const sorted = [...keywords].sort((a, b) => b.count - a.count).slice(0, limit);
+  const format = formatCount ?? ((k) => String(k.count));
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -78,7 +81,7 @@ function TopList({
             />
             <span className="truncate text-sm font-medium text-gray-800">{k.keyword}</span>
           </div>
-          <span className="ml-2 shrink-0 text-sm text-gray-500">{k.count}</span>
+          <span className="ml-2 shrink-0 text-sm text-gray-500">{format(k)}</span>
         </div>
       ))}
     </div>
@@ -119,6 +122,8 @@ type InsightsClientProps = {
   lastUpdated: string | null;
   activeCategory: InsightsCategory;
   loc?: LocationGranularity;
+  foldSuburbs?: boolean;
+  perCapita?: boolean;
   selectedKeyword?: string;
   keywordJobs?: JobListItem[];
   keywordTotalCount?: number;
@@ -136,6 +141,8 @@ export default function InsightsClient({
   lastUpdated,
   activeCategory,
   loc = "city",
+  foldSuburbs = false,
+  perCapita = false,
   selectedKeyword,
   keywordJobs,
   keywordTotalCount,
@@ -149,13 +156,32 @@ export default function InsightsClient({
   const [visibleCount, setVisibleCount] = useState<number>(
     DEFAULT_WORD_CLOUD_COUNT,
   );
-  const visibleKeywords = useMemo(
-    () => keywords.slice(0, visibleCount),
-    [keywords, visibleCount],
-  );
 
   const isLocation = activeCategory === "location";
   const isTitle = activeCategory === "title";
+  // Per-capita is a pure display switch: the server always returns raw
+  // counts alongside the rate, so buckets without a census denominator
+  // keep their raw count and sort after rated buckets.
+  const perCapitaActive = isLocation && perCapita;
+  const displayKeywords = useMemo(() => {
+    if (!perCapitaActive) return keywords;
+    return keywords
+      .map((k) => (k.per_100k != null ? { ...k, count: k.per_100k } : k))
+      .sort((a, b) => {
+        const aRated = a.per_100k != null;
+        const bRated = b.per_100k != null;
+        if (aRated !== bRated) return aRated ? -1 : 1;
+        return b.count - a.count || (a.keyword < b.keyword ? -1 : 1);
+      });
+  }, [keywords, perCapitaActive]);
+  const visibleKeywords = useMemo(
+    () => displayKeywords.slice(0, visibleCount),
+    [displayKeywords, visibleCount],
+  );
+  const formatCount = perCapitaActive
+    ? (k: KeywordInsight) =>
+      k.per_100k != null ? k.per_100k.toFixed(1) : String(k.count)
+    : undefined;
   const drillCopy = isLocation
     ? {
       units: totalKeywords === 1 ? "location" : "locations",
@@ -191,8 +217,33 @@ export default function InsightsClient({
     const next = new URLSearchParams(searchParams.toString());
     next.set("category", "location");
     next.set("loc", granularity);
+    // Folding only exists in the city view; a folded province link would
+    // be a lie, so drop it. Per-capita is display-only and survives.
+    if (granularity !== "city") next.delete("fold");
     // A drilled label belongs to one namespace; clear it on switch.
     next.delete("keyword");
+    resetResultPosition(next);
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const selectFoldSuburbs = (folded: boolean) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("category", "location");
+    next.set("loc", "city");
+    if (folded) next.set("fold", "greater");
+    else next.delete("fold");
+    // Folded and unfolded labels live in different namespaces.
+    next.delete("keyword");
+    resetResultPosition(next);
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const selectPerCapita = (on: boolean) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (on) next.set("percap", "true");
+    else next.delete("percap");
     resetResultPosition(next);
     const query = next.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -240,6 +291,9 @@ export default function InsightsClient({
           <span className="font-medium text-gray-700">
             {totalKeywords} {drillCopy.units}
           </span>
+          {perCapitaActive && (
+            <span> (jobs per 100k residents, 2021 Census)</span>
+          )}
           {visualizedCount !== undefined &&
             limit !== undefined &&
             totalKeywords > visualizedCount && (
@@ -340,6 +394,40 @@ export default function InsightsClient({
                 ))}
               </div>
             )}
+            {isLocation && (
+              <div className="mb-2 flex flex-wrap items-center gap-1">
+                {loc === "city" && (
+                  <button
+                    key="fold-suburbs"
+                    type="button"
+                    aria-pressed={foldSuburbs}
+                    title="Fold suburbs and satellites into Greater Toronto, Greater Montreal, …"
+                    onClick={() => selectFoldSuburbs(!foldSuburbs)}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                      foldSuburbs
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                    }`}
+                  >
+                    Greater metro areas
+                  </button>
+                )}
+                <button
+                  key="per-capita"
+                  type="button"
+                  aria-pressed={perCapitaActive}
+                  title="Show jobs per 100k residents instead of raw counts"
+                  onClick={() => selectPerCapita(!perCapitaActive)}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                    perCapitaActive
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                  }`}
+                >
+                  Per 100k residents
+                </button>
+              </div>
+            )}
             <div
               className="mb-2 flex flex-wrap items-center justify-between gap-2"
               role="radiogroup"
@@ -378,7 +466,7 @@ export default function InsightsClient({
             <h2 className="mb-3 text-lg font-semibold text-gray-800">
               Top {Math.min(20, keywords.length)} — {CATEGORY_LABELS[activeCategory]}
             </h2>
-            <TopList keywords={keywords} limit={20} />
+            <TopList keywords={displayKeywords} limit={20} formatCount={formatCount} />
           </div>
         </>
       ) : (

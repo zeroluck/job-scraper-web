@@ -25,3 +25,30 @@ test("location cache key separates granularities and round-trips", () => {
   // Keyword category/minCount/limit must not leak into location keys.
   assert.ok(!city.includes("category"));
 });
+
+test("location cache key separates folded and unfolded city views", () => {
+  const unfolded = normalizeLocationInsightsKey({ granularity: "city" });
+  const folded = normalizeLocationInsightsKey({
+    granularity: "city",
+    foldSuburbs: true,
+  });
+  assert.notEqual(unfolded, folded);
+  assert.deepEqual(deserializeLocationInsightsKey(folded), {
+    providers: undefined,
+    archetypes: undefined,
+    levels: undefined,
+    filterStatus: undefined,
+    companies: undefined,
+    jobTitles: undefined,
+    provinces: undefined,
+    locationScopes: undefined,
+    excludeMetros: undefined,
+    granularity: "city",
+    foldSuburbs: true,
+  });
+  // Legacy keys without the fold flag still deserialize unfolded.
+  assert.equal(
+    deserializeLocationInsightsKey(unfolded).foldSuburbs,
+    undefined,
+  );
+});

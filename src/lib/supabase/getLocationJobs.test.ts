@@ -24,6 +24,7 @@ test("location jobs pass labels through with bounded pagination", async () => {
 
   assert.equal(call?.name, "get_location_job_ids");
   assert.equal(call?.params.p_granularity, "city");
+  assert.equal(call?.params.p_fold_suburbs, false);
   assert.equal(call?.params.p_label, "Montreal");
   assert.equal(call?.params.p_limit, 100);
   assert.equal(call?.params.p_offset, 100);

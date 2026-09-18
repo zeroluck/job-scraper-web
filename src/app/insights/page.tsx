@@ -87,6 +87,8 @@ async function InsightsResults({
   keywordPage,
   keywordPageSize,
   locationGranularity,
+  foldSuburbs,
+  perCapita,
 }: {
   filtersKey: string;
   scopeLabel: string;
@@ -96,6 +98,8 @@ async function InsightsResults({
   keywordPage: number;
   keywordPageSize: 10 | 25 | 100;
   locationGranularity?: LocationInsightsGranularity;
+  foldSuburbs?: boolean;
+  perCapita?: boolean;
 }) {
   void filtersKey;
   if (locationGranularity) {
@@ -104,6 +108,8 @@ async function InsightsResults({
         scopeLabel={scopeLabel}
         queryOptions={queryOptions}
         granularity={locationGranularity}
+        foldSuburbs={foldSuburbs === true}
+        perCapita={perCapita === true}
         selectedKeyword={selectedKeyword}
         keywordPage={keywordPage}
         keywordPageSize={keywordPageSize}
@@ -256,6 +262,8 @@ async function LocationResults({
   scopeLabel,
   queryOptions,
   granularity,
+  foldSuburbs,
+  perCapita,
   selectedKeyword,
   keywordPage,
   keywordPageSize,
@@ -263,6 +271,8 @@ async function LocationResults({
   scopeLabel: string;
   queryOptions: Parameters<typeof getCachedKeywordInsights>[0];
   granularity: LocationInsightsGranularity;
+  foldSuburbs: boolean;
+  perCapita: boolean;
   selectedKeyword?: string;
   keywordPage: number;
   keywordPageSize: 10 | 25 | 100;
@@ -274,7 +284,7 @@ async function LocationResults({
   let result: Awaited<ReturnType<typeof getCachedLocationInsights>> | undefined;
   let errorMessage: string | undefined;
   try {
-    result = await getCachedLocationInsights({ ...locationFilters, granularity });
+    result = await getCachedLocationInsights({ ...locationFilters, granularity, foldSuburbs });
   } catch (error) {
     errorMessage =
       error instanceof Error ? error.message : "Failed to load location insights.";
@@ -302,6 +312,7 @@ async function LocationResults({
       jobsResult = await getLocationJobs({
         ...locationFilters,
         granularity,
+        foldSuburbs,
         label: validSelection,
         page: keywordPage,
         pageSize: keywordPageSize,
@@ -322,6 +333,8 @@ async function LocationResults({
       lastUpdated={result.keywords[0]?.last_updated ?? null}
       activeCategory="location"
       loc={granularity}
+      foldSuburbs={foldSuburbs}
+      perCapita={perCapita}
       selectedKeyword={validSelection}
       keywordJobs={jobsResult?.jobs}
       keywordTotalCount={jobsResult?.totalCount}
@@ -347,6 +360,12 @@ export default async function InsightsPage({
     : [...KNOWN_ARCHETYPES];
   const activeCategory = filters.category ?? "all";
   const loc = filters.loc ?? "city";
+  // Fold only applies to the city view; province ignores it server-side,
+  // so drop it from the URL state there to keep shared links honest.
+  const foldSuburbs = activeCategory === "location" && loc === "city"
+    ? filters.fold === "greater"
+    : false;
+  const perCapita = filters.perCapita === true;
   const rawNavigation = parseFilterSearchParams(rawParams);
   const keywordPage = parsePageParam(rawParams) ?? 1;
   const keywordPageSize = rawNavigation.pageSize ?? 25;
@@ -382,6 +401,8 @@ export default async function InsightsPage({
           keywordPage={keywordPage}
           keywordPageSize={keywordPageSize}
           locationGranularity={activeCategory === "location" ? loc : undefined}
+          foldSuburbs={foldSuburbs}
+          perCapita={perCapita}
         />
       </Suspense>
     </div>
