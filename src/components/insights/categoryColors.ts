@@ -6,6 +6,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   certification: "#9A3412",
   attribute: "#6B21A8",
   location: "#BE123C",
+  title: "#334155",
 };
 
 export const CATEGORY_LABELS: Record<InsightsCategory, string> = {
@@ -15,4 +16,5 @@ export const CATEGORY_LABELS: Record<InsightsCategory, string> = {
   certification: "Certifications",
   attribute: "Attributes",
   location: "Locations",
+  title: "Job Titles",
 };

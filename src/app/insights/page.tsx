@@ -8,9 +8,11 @@ import { parseFilterSearchParams } from "@/lib/filters/searchParams";
 import { ROUTE_FILTERS, sanitizeSearchParamsForRoute } from "@/lib/filters/routeConfig";
 import { getCachedKeywordInsights } from "@/lib/supabase/cachedKeywordInsights";
 import { getCachedLocationInsights } from "@/lib/supabase/cachedLocationInsights";
+import { getCachedTitleInsights } from "@/lib/supabase/cachedTitleInsights";
 import {
   getKeywordJobs,
   getLocationJobs,
+  getTitleJobs,
   INSIGHTS_KEYWORD_LIMIT,
   type LocationInsightsGranularity,
 } from "@/lib/supabase/queries";
@@ -88,7 +90,7 @@ async function InsightsResults({
 }: {
   filtersKey: string;
   scopeLabel: string;
-  activeCategory: "all" | "skill" | "technology" | "certification" | "attribute" | "location";
+  activeCategory: "all" | "skill" | "technology" | "certification" | "attribute" | "location" | "title";
   queryOptions: Parameters<typeof getCachedKeywordInsights>[0];
   selectedKeyword?: string;
   keywordPage: number;
@@ -102,6 +104,17 @@ async function InsightsResults({
         scopeLabel={scopeLabel}
         queryOptions={queryOptions}
         granularity={locationGranularity}
+        selectedKeyword={selectedKeyword}
+        keywordPage={keywordPage}
+        keywordPageSize={keywordPageSize}
+      />
+    );
+  }
+  if (activeCategory === "title") {
+    return (
+      <TitleResults
+        scopeLabel={scopeLabel}
+        queryOptions={queryOptions}
         selectedKeyword={selectedKeyword}
         keywordPage={keywordPage}
         keywordPageSize={keywordPageSize}
@@ -163,6 +176,78 @@ async function InsightsResults({
       keywordPage={keywordPage}
       keywordPageSize={keywordPageSize}
       keywordError={keywordError}
+    />
+  );
+}
+
+async function TitleResults({
+  scopeLabel,
+  queryOptions,
+  selectedKeyword,
+  keywordPage,
+  keywordPageSize,
+}: {
+  scopeLabel: string;
+  queryOptions: Parameters<typeof getCachedKeywordInsights>[0];
+  selectedKeyword?: string;
+  keywordPage: number;
+  keywordPageSize: 10 | 25 | 100;
+}) {
+  const { category: _category, ...titleFilters } = queryOptions ?? {};
+  void _category;
+  let result: Awaited<ReturnType<typeof getCachedTitleInsights>> | undefined;
+  let errorMessage: string | undefined;
+  try {
+    result = await getCachedTitleInsights({ ...titleFilters, minCount: 2 });
+  } catch (error) {
+    errorMessage =
+      error instanceof Error ? error.message : "Failed to load title insights.";
+  }
+
+  if (!result) {
+    return (
+      <div className="flex h-64 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-400">
+        {errorMessage}
+      </div>
+    );
+  }
+
+  // Same segregation rule as locations: only a label from this cloud drills.
+  const validSelection = selectedKeyword &&
+      result.keywords.some((k) => k.keyword === selectedKeyword)
+    ? selectedKeyword
+    : undefined;
+  let jobsResult: Awaited<ReturnType<typeof getTitleJobs>> | undefined;
+  let jobsError: string | undefined;
+  if (validSelection) {
+    try {
+      jobsResult = await getTitleJobs({
+        ...titleFilters,
+        label: validSelection,
+        page: keywordPage,
+        pageSize: keywordPageSize,
+      });
+    } catch (error) {
+      jobsError =
+        error instanceof Error ? error.message : "Failed to load title jobs.";
+    }
+  }
+
+  return (
+    <InsightsClient
+      scopeLabel={scopeLabel}
+      keywords={result.keywords}
+      totalKeywords={result.totalCount}
+      visualizedCount={result.keywords.length}
+      limit={INSIGHTS_KEYWORD_LIMIT}
+      lastUpdated={result.keywords[0]?.last_updated ?? null}
+      activeCategory="title"
+      selectedKeyword={validSelection}
+      keywordJobs={jobsResult?.jobs}
+      keywordTotalCount={jobsResult?.totalCount}
+      keywordPage={keywordPage}
+      keywordPageSize={keywordPageSize}
+      keywordError={jobsError}
     />
   );
 }

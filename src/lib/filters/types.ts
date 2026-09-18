@@ -70,6 +70,7 @@ export const INSIGHTS_CATEGORY_VALUES = [
   "certification",
   "attribute",
   "location",
+  "title",
 ] as const;
 export type InsightsCategory = (typeof INSIGHTS_CATEGORY_VALUES)[number];
 

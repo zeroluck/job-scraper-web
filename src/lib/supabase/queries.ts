@@ -1137,6 +1137,170 @@ export async function getLocationJobs(
   return { jobs, totalCount };
 }
 
+export interface TitleInsightsQueryOptions {
+  provider?: string | readonly string[];
+  providers?: readonly string[];
+  archetype?: string | readonly string[];
+  archetypes?: readonly string[];
+  levels?: readonly string[];
+  filterStatus?: FilterStatus | "all" | "filtered" | "unfiltered";
+  companies?: readonly string[];
+  jobTitles?: readonly string[];
+  provinces?: readonly string[];
+  locationScopes?: readonly string[];
+  excludeMetros?: readonly string[];
+  minCount?: number;
+  limit?: number;
+}
+
+export interface TitleInsightsResult {
+  keywords: KeywordInsight[];
+  totalCount: number;
+}
+
+export interface TitleJobsQueryOptions extends TitleInsightsQueryOptions {
+  /** Display title as shown in the cloud; matched case-insensitively. */
+  label: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function executeTitleInsightsQuery(
+  supabase: any,
+  options: TitleInsightsQueryOptions = {},
+): Promise<TitleInsightsResult> {
+  const response = await supabase.rpc("get_title_insights", {
+    p_providers: arrayOption(options.providers, options.provider),
+    p_archetypes: compatibleArchetypeValues(
+      arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+    ),
+    p_levels: nonEmpty(options.levels),
+    p_filter_status: keywordFilterStatus(options.filterStatus),
+    p_companies: nonEmpty(options.companies),
+    p_job_titles: nonEmpty(options.jobTitles),
+    p_provinces: nonEmpty(options.provinces),
+    p_location_scopes: nonEmpty(options.locationScopes),
+    p_exclude_metros: nonEmpty(options.excludeMetros),
+    p_min_count: Math.max(0, Math.trunc(finiteNumber(options.minCount) ?? 2)),
+    p_limit: normalizeInsightsLimit(options.limit),
+    p_offset: 0,
+  });
+  const rows = ((await handleResponse(response)) ?? []) as Array<{
+    label?: string | null;
+    count?: number | string | null;
+    total_count?: number | string | null;
+    last_updated?: string | null;
+  }>;
+
+  const parsedTotal = Number(rows[0]?.total_count);
+  const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
+  const keywords: KeywordInsight[] = rows.flatMap((row) =>
+    typeof row.label === "string" && row.label
+      ? [{
+        keyword: row.label,
+        category: "title",
+        count: Number(row.count) || 0,
+        last_updated: row.last_updated ?? null,
+      }]
+      : [],
+  );
+  return { keywords, totalCount };
+}
+
+export async function getTitleInsights(
+  options: TitleInsightsQueryOptions = {},
+): Promise<TitleInsightsResult> {
+  const supabase = await supabaseClientFactory();
+  return executeTitleInsightsQuery(supabase, options);
+}
+
+function titleJobsPage(options: TitleJobsQueryOptions): {
+  label: string;
+  limit: number;
+  offset: number;
+} {
+  const label = options.label?.trim();
+  if (!label || label.length > 200) {
+    throw new Error("A title label of 1-200 characters is required");
+  }
+  const page = safePositiveInteger(options.page, 1);
+  const requestedPageSize = Math.trunc(finiteNumber(options.pageSize) ?? 25);
+  const limit = Math.min(
+    Math.max(Number.isSafeInteger(requestedPageSize) ? requestedPageSize : 25, 1),
+    100,
+  );
+  return { label, limit, offset: (page - 1) * limit };
+}
+
+export async function executeTitleJobsQuery(
+  supabase: any,
+  options: TitleJobsQueryOptions,
+): Promise<{ jobIds: string[]; totalCount: number }> {
+  const { label, limit, offset } = titleJobsPage(options);
+  const response = await supabase.rpc("get_title_job_ids", {
+    p_providers: arrayOption(options.providers, options.provider),
+    p_archetypes: compatibleArchetypeValues(
+      arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+    ),
+    p_levels: nonEmpty(options.levels),
+    p_filter_status: keywordFilterStatus(options.filterStatus),
+    p_companies: nonEmpty(options.companies),
+    p_job_titles: nonEmpty(options.jobTitles),
+    p_provinces: nonEmpty(options.provinces),
+    p_location_scopes: nonEmpty(options.locationScopes),
+    p_exclude_metros: nonEmpty(options.excludeMetros),
+    p_title: label,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  const rows = ((await handleResponse(response)) ?? []) as Array<{
+    job_id: string | null;
+    total_count?: number | string | null;
+  }>;
+
+  const parsedTotal = Number(rows[0]?.total_count);
+  const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
+  const jobIds = rows.flatMap((row) =>
+    typeof row.job_id === "string" ? [row.job_id] : [],
+  );
+  return { jobIds, totalCount };
+}
+
+export async function getTitleJobs(
+  options: TitleJobsQueryOptions,
+): Promise<KeywordJobsResult> {
+  const supabase = await supabaseClientFactory();
+  const { jobIds, totalCount } = await executeTitleJobsQuery(supabase, options);
+  if (!jobIds.length) return { jobs: [], totalCount };
+  const archetypes = compatibleArchetypeValues(
+    arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+  );
+  const memberships = await getMembershipProjections(
+    supabase,
+    jobIds,
+    "all",
+    { archetype: archetypes },
+    keywordFilterStatus(options.filterStatus),
+  );
+  const jobs: JobListItem[] = [];
+  for (let start = 0; start < jobIds.length; start += 500) {
+    const response = await supabase
+      .from("jobs")
+      .select(JOB_LIST_SELECT)
+      .in("job_id", jobIds.slice(start, start + 500));
+    for (const job of ((await handleResponse(response)) ?? []) as JobListItem[]) {
+      const membership = memberships.get(job.job_id);
+      if (!membership) {
+        throw new Error(`Missing qualifying membership projection for job ${job.job_id}`);
+      }
+      jobs.push(overlayMembership(job, membership));
+    }
+  }
+  const rank = new Map(jobIds.map((jobId, index) => [jobId, index]));
+  jobs.sort((left, right) => rank.get(left.job_id)! - rank.get(right.job_id)!);
+  return { jobs, totalCount };
+}
+
 export async function getJobKeywordInsights(
   jobId: string,
   archetype?: string | readonly string[],

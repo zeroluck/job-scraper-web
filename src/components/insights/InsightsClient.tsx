@@ -38,9 +38,13 @@ const LOCATION_GRANULARITY_LABELS: Record<LocationGranularity, string> = {
 };
 
 function Legend() {
+  // Keyword categories only: location/title tabs never appear on "all".
+  const entries = Object.entries(CATEGORY_COLORS).filter(
+    ([cat]) => cat !== "location" && cat !== "title",
+  );
   return (
     <div className="mb-6 flex flex-wrap justify-center gap-4">
-      {Object.entries(CATEGORY_COLORS).filter(([cat]) => cat !== "location").map(([cat, color]) => (
+      {entries.map(([cat, color]) => (
         <div key={cat} className="flex items-center gap-1.5 text-sm text-gray-600">
           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
           {CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] ?? cat}
@@ -151,6 +155,27 @@ export default function InsightsClient({
   );
 
   const isLocation = activeCategory === "location";
+  const isTitle = activeCategory === "title";
+  const drillCopy = isLocation
+    ? {
+      units: totalKeywords === 1 ? "location" : "locations",
+      heading: "Jobs in",
+      chipPrefix: "Location",
+      empty: "No jobs in this location under the current filters.",
+    }
+    : isTitle
+      ? {
+        units: totalKeywords === 1 ? "job title" : "job titles",
+        heading: "Jobs titled",
+        chipPrefix: "Title",
+        empty: "No jobs with this title under the current filters.",
+      }
+      : {
+        units: "unique keywords",
+        heading: "Jobs mentioning",
+        chipPrefix: "Keyword",
+        empty: "No jobs mention this keyword under the current filters.",
+      };
 
   const selectCategory = (category: InsightsCategory) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -213,7 +238,7 @@ export default function InsightsClient({
         <p className="text-sm text-gray-500">
           {scopeLabel} roles. Showing{" "}
           <span className="font-medium text-gray-700">
-            {totalKeywords} {isLocation ? (totalKeywords === 1 ? "location" : "locations") : "unique keywords"}
+            {totalKeywords} {drillCopy.units}
           </span>
           {visualizedCount !== undefined &&
             limit !== undefined &&
@@ -249,12 +274,12 @@ export default function InsightsClient({
 
       {selectedKeyword && (
         <section
-          aria-label={isLocation ? `Jobs in ${selectedKeyword}` : `Jobs mentioning ${selectedKeyword}`}
+          aria-label={`${drillCopy.heading} ${selectedKeyword}`}
           className="mb-8"
         >
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-gray-800">
-              {isLocation ? "Jobs in" : "Jobs mentioning"} &ldquo;{selectedKeyword}&rdquo;
+              {drillCopy.heading} &ldquo;{selectedKeyword}&rdquo;
               {keywordTotalCount !== undefined && (
                 <span className="ml-2 text-sm font-normal text-gray-600">
                   {keywordTotalCount} {keywordTotalCount === 1 ? "job" : "jobs"}
@@ -264,7 +289,7 @@ export default function InsightsClient({
             <KeywordChip
               keyword={selectedKeyword}
               onRemove={clearKeyword}
-              prefix={isLocation ? "Location" : "Keyword"}
+              prefix={drillCopy.chipPrefix}
             />
           </div>
           {keywordError ? (
@@ -277,13 +302,11 @@ export default function InsightsClient({
               currentPage={keywordPage}
               totalPages={keywordTotalPages}
               pageSize={keywordPageSize}
-              listTitle={isLocation ? `Jobs in ${selectedKeyword}` : `Jobs mentioning ${selectedKeyword}`}
+              listTitle={`${drillCopy.heading} ${selectedKeyword}`}
             />
           ) : (
             <div className="flex h-32 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-6 text-center text-sm text-gray-600">
-              {isLocation
-                ? "No jobs in this location under the current filters."
-                : "No jobs mention this keyword under the current filters."}
+              {drillCopy.empty}
             </div>
           )}
         </section>
