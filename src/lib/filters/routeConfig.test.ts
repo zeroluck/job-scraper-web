@@ -100,3 +100,29 @@ test("keyword stays within Insights and never leaks to job lists", () => {
   assert.equal(insights.get("selectedJobId"), null);
   assert.equal(buildRouteSearchParams(source, "/jobs/all").get("keyword"), null);
 });
+
+test("location category and granularity stay within Insights", () => {
+  const source = params([
+    ["category", "location"],
+    ["loc", "province"],
+    ["keyword", "Ontario"],
+  ]);
+  const insights = buildRouteSearchParams(source, "/insights");
+  assert.equal(insights.get("category"), "location");
+  assert.equal(insights.get("loc"), "province");
+  assert.equal(insights.get("keyword"), "Ontario");
+  const list = buildRouteSearchParams(source, "/jobs/all");
+  assert.equal(list.get("category"), null);
+  assert.equal(list.get("loc"), null);
+  assert.equal(list.get("keyword"), null);
+});
+
+test("invalid loc values are dropped on insights", () => {
+  const source = params([
+    ["category", "location"],
+    ["loc", "planet"],
+  ]);
+  const insights = buildRouteSearchParams(source, "/insights");
+  assert.equal(insights.get("category"), "location");
+  assert.equal(insights.get("loc"), null);
+});

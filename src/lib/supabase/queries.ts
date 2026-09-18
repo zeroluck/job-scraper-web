@@ -15,6 +15,7 @@ import type {
 } from "../filters/types.ts";
 import { parseBooleanSearch, type BooleanSearchNode } from "../jobs/booleanSearch.ts";
 import { compatibleArchetypeValues } from "../archetypes/registry.ts";
+import { metroLabel, provinceLabel } from "../insights/locations.ts";
 
 if (!process.env.NODE_TEST_CONTEXT) {
   await import("server-only");
@@ -857,6 +858,37 @@ export interface KeywordJobsQueryOptions extends KeywordInsightsQueryOptions {
   pageSize?: number;
 }
 
+export type LocationInsightsGranularity = "city" | "province";
+
+export interface LocationInsightsQueryOptions {
+  provider?: string | readonly string[];
+  providers?: readonly string[];
+  archetype?: string | readonly string[];
+  archetypes?: readonly string[];
+  levels?: readonly string[];
+  filterStatus?: FilterStatus | "all" | "filtered" | "unfiltered";
+  companies?: readonly string[];
+  jobTitles?: readonly string[];
+  provinces?: readonly string[];
+  locationScopes?: readonly string[];
+  excludeMetros?: readonly string[];
+  granularity?: LocationInsightsGranularity;
+}
+
+export interface LocationInsightsResult {
+  keywords: KeywordInsight[];
+  totalCount: number;
+  granularity: LocationInsightsGranularity;
+}
+
+export interface LocationJobsQueryOptions
+  extends LocationInsightsQueryOptions {
+  /** Metro code (city) or province code, null for the Unspecified bucket. */
+  code: string | null;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface KeywordJobsResult {
   jobs: JobListItem[];
   totalCount: number;
@@ -942,6 +974,153 @@ export async function getKeywordJobs(
       // The keyword RPC and its projection use the same lane predicates.
       // Missing projection state is therefore a consistency error, not a
       // reason to leak jobs.* global technology-delivery state.
+      if (!membership) {
+        throw new Error(`Missing qualifying membership projection for job ${job.job_id}`);
+      }
+      jobs.push(overlayMembership(job, membership));
+    }
+  }
+  const rank = new Map(jobIds.map((jobId, index) => [jobId, index]));
+  jobs.sort((left, right) => rank.get(left.job_id)! - rank.get(right.job_id)!);
+  return { jobs, totalCount };
+}
+
+function locationGranularityOption(
+  granularity: LocationInsightsQueryOptions["granularity"],
+): LocationInsightsGranularity {
+  return granularity === "province" ? "province" : "city";
+}
+
+export async function executeLocationInsightsQuery(
+  supabase: any,
+  options: LocationInsightsQueryOptions = {},
+): Promise<LocationInsightsResult> {
+  const granularity = locationGranularityOption(options.granularity);
+  const response = await supabase.rpc("get_location_insights", {
+    p_providers: arrayOption(options.providers, options.provider),
+    p_archetypes: compatibleArchetypeValues(
+      arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+    ),
+    p_levels: nonEmpty(options.levels),
+    p_filter_status: keywordFilterStatus(options.filterStatus),
+    p_companies: nonEmpty(options.companies),
+    p_job_titles: nonEmpty(options.jobTitles),
+    p_provinces: nonEmpty(options.provinces),
+    p_location_scopes: nonEmpty(options.locationScopes),
+    p_exclude_metros: nonEmpty(options.excludeMetros),
+    p_granularity: granularity,
+  });
+  const rows = ((await handleResponse(response)) ?? []) as Array<{
+    code?: string | null;
+    count?: number | string | null;
+    total_count?: number | string | null;
+    last_updated?: string | null;
+  }>;
+
+  const parsedTotal = Number(rows[0]?.total_count);
+  const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
+  const label = granularity === "province" ? provinceLabel : metroLabel;
+  const keywords: KeywordInsight[] = rows.map((row) => ({
+    keyword: label(row.code ?? null),
+    category: "location",
+    count: Number(row.count) || 0,
+    last_updated: row.last_updated ?? null,
+  }));
+  return { keywords, totalCount, granularity };
+}
+
+export async function getLocationInsights(
+  options: LocationInsightsQueryOptions = {},
+): Promise<LocationInsightsResult> {
+  const supabase = await supabaseClientFactory();
+  return executeLocationInsightsQuery(supabase, options);
+}
+
+function locationJobsPage(options: LocationJobsQueryOptions): {
+  granularity: LocationInsightsGranularity;
+  code: string | null;
+  limit: number;
+  offset: number;
+} {
+  const granularity = locationGranularityOption(options.granularity);
+  const page = safePositiveInteger(options.page, 1);
+  const requestedPageSize = Math.trunc(finiteNumber(options.pageSize) ?? 25);
+  const limit = Math.min(
+    Math.max(Number.isSafeInteger(requestedPageSize) ? requestedPageSize : 25, 1),
+    100,
+  );
+  return {
+    granularity,
+    code: options.code ?? null,
+    limit,
+    offset: (page - 1) * limit,
+  };
+}
+
+export async function executeLocationJobsQuery(
+  supabase: any,
+  options: LocationJobsQueryOptions,
+): Promise<{ jobIds: string[]; totalCount: number }> {
+  const { granularity, code, limit, offset } = locationJobsPage(options);
+  // Empty string is the null-bucket sentinel (codes are never empty).
+  // p_granularity selects which predicate applies; the other is ignored.
+  const response = await supabase.rpc("get_location_job_ids", {
+    p_providers: arrayOption(options.providers, options.provider),
+    p_archetypes: compatibleArchetypeValues(
+      arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+    ),
+    p_levels: nonEmpty(options.levels),
+    p_filter_status: keywordFilterStatus(options.filterStatus),
+    p_companies: nonEmpty(options.companies),
+    p_job_titles: nonEmpty(options.jobTitles),
+    p_provinces: nonEmpty(options.provinces),
+    p_location_scopes: nonEmpty(options.locationScopes),
+    p_exclude_metros: nonEmpty(options.excludeMetros),
+    p_granularity: granularity,
+    p_metro: granularity === "city" ? (code ?? "") : "",
+    p_province: granularity === "province" ? (code ?? "") : "",
+    p_limit: limit,
+    p_offset: offset,
+  });
+  const rows = ((await handleResponse(response)) ?? []) as Array<{
+    job_id: string | null;
+    total_count?: number | string | null;
+  }>;
+
+  const parsedTotal = Number(rows[0]?.total_count);
+  const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
+  const jobIds = rows.flatMap((row) =>
+    typeof row.job_id === "string" ? [row.job_id] : [],
+  );
+  return { jobIds, totalCount };
+}
+
+export async function getLocationJobs(
+  options: LocationJobsQueryOptions,
+): Promise<KeywordJobsResult> {
+  const supabase = await supabaseClientFactory();
+  const { jobIds, totalCount } = await executeLocationJobsQuery(supabase, options);
+  if (!jobIds.length) return { jobs: [], totalCount };
+  const archetypes = compatibleArchetypeValues(
+    arrayOption(options.archetypes, options.archetype, ["technology_delivery"]) ?? [],
+  );
+  const memberships = await getMembershipProjections(
+    supabase,
+    jobIds,
+    "all",
+    { archetype: archetypes },
+    keywordFilterStatus(options.filterStatus),
+  );
+  const jobs: JobListItem[] = [];
+  for (let start = 0; start < jobIds.length; start += 500) {
+    const response = await supabase
+      .from("jobs")
+      .select(JOB_LIST_SELECT)
+      .in("job_id", jobIds.slice(start, start + 500));
+    for (const job of ((await handleResponse(response)) ?? []) as JobListItem[]) {
+      const membership = memberships.get(job.job_id);
+      // Same lane predicates as the location RPC; a missing projection is a
+      // consistency error, not a reason to leak unscoped job state.
       if (!membership) {
         throw new Error(`Missing qualifying membership projection for job ${job.job_id}`);
       }

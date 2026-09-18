@@ -69,8 +69,12 @@ export const INSIGHTS_CATEGORY_VALUES = [
   "technology",
   "certification",
   "attribute",
+  "location",
 ] as const;
 export type InsightsCategory = (typeof INSIGHTS_CATEGORY_VALUES)[number];
+
+export const LOCATION_GRANULARITY_VALUES = ["city", "province"] as const;
+export type LocationGranularity = (typeof LOCATION_GRANULARITY_VALUES)[number];
 
 export const APPLICATION_STATUS_VALUES = [
   "applied",
@@ -118,6 +122,7 @@ export interface FilterState<TArchetype extends string = BuiltInArchetype> {
   excludeMetro?: MetroCode[];
   category?: InsightsCategory;
   keyword?: string;
+  loc?: LocationGranularity;
   query?: string;
   sortBy?: SortField;
   sortOrder?: SortOrder;

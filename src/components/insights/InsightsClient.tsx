@@ -8,7 +8,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { resetResultPosition } from "@/lib/filters/searchParams";
 import {
   INSIGHTS_CATEGORY_VALUES,
+  LOCATION_GRANULARITY_VALUES,
   type InsightsCategory,
+  type LocationGranularity,
 } from "@/lib/filters/types";
 import type { JobListItem, KeywordInsight } from "@/types";
 import TopMatchesList from "@/components/jobs/TopMatchesList";
@@ -30,10 +32,15 @@ const WordCloudClient = dynamic(() => import("./WordCloudClient"), {
   ),
 });
 
+const LOCATION_GRANULARITY_LABELS: Record<LocationGranularity, string> = {
+  city: "City",
+  province: "State / Province",
+};
+
 function Legend() {
   return (
     <div className="mb-6 flex flex-wrap justify-center gap-4">
-      {Object.entries(CATEGORY_COLORS).map(([cat, color]) => (
+      {Object.entries(CATEGORY_COLORS).filter(([cat]) => cat !== "location").map(([cat, color]) => (
         <div key={cat} className="flex items-center gap-1.5 text-sm text-gray-600">
           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
           {CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] ?? cat}
@@ -77,11 +84,13 @@ function TopList({
 function KeywordChip({
   keyword,
   onRemove,
+  prefix = "Keyword",
 }: {
   keyword: string;
   onRemove: () => void;
+  prefix?: string;
 }) {
-  const label = `Keyword: ${keyword}`;
+  const label = `${prefix}: ${keyword}`;
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
       {label}
@@ -105,6 +114,7 @@ type InsightsClientProps = {
   limit?: number;
   lastUpdated: string | null;
   activeCategory: InsightsCategory;
+  loc?: LocationGranularity;
   selectedKeyword?: string;
   keywordJobs?: JobListItem[];
   keywordTotalCount?: number;
@@ -121,6 +131,7 @@ export default function InsightsClient({
   limit,
   lastUpdated,
   activeCategory,
+  loc = "city",
   selectedKeyword,
   keywordJobs,
   keywordTotalCount,
@@ -139,24 +150,41 @@ export default function InsightsClient({
     [keywords, visibleCount],
   );
 
+  const isLocation = activeCategory === "location";
+
   const selectCategory = (category: InsightsCategory) => {
     const next = new URLSearchParams(searchParams.toString());
     next.set("category", category);
+    // Location granularity must not leak onto keyword tabs.
+    if (category !== "location") next.delete("loc");
     resetResultPosition(next);
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
+  const selectLocationGranularity = (granularity: LocationGranularity) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("category", "location");
+    next.set("loc", granularity);
+    // A drilled label belongs to one namespace; clear it on switch.
+    next.delete("keyword");
+    resetResultPosition(next);
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
   const selectKeyword = (keyword: string, category: string) => {
     const next = new URLSearchParams(searchParams.toString());
     next.set("keyword", keyword);
-    // Ensure a concrete category so the drill-down list is scoped to the
-    // clicked word's category instead of every category at once.
-    if (
+    if (isLocation) {
+      next.set("category", "location");
+    } else if (
       activeCategory === "all" &&
       (INSIGHTS_CATEGORY_VALUES as readonly string[]).includes(category) &&
       category !== "all"
     ) {
+      // Ensure a concrete category so the drill-down list is scoped to the
+      // clicked word's category instead of every category at once.
       next.set("category", category);
     }
     resetResultPosition(next);
@@ -184,7 +212,9 @@ export default function InsightsClient({
       <div className="mb-6">
         <p className="text-sm text-gray-500">
           {scopeLabel} roles. Showing{" "}
-          <span className="font-medium text-gray-700">{totalKeywords} unique keywords</span>
+          <span className="font-medium text-gray-700">
+            {totalKeywords} {isLocation ? (totalKeywords === 1 ? "location" : "locations") : "unique keywords"}
+          </span>
           {visualizedCount !== undefined &&
             limit !== undefined &&
             totalKeywords > visualizedCount && (
@@ -219,19 +249,23 @@ export default function InsightsClient({
 
       {selectedKeyword && (
         <section
-          aria-label={`Jobs mentioning ${selectedKeyword}`}
+          aria-label={isLocation ? `Jobs in ${selectedKeyword}` : `Jobs mentioning ${selectedKeyword}`}
           className="mb-8"
         >
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-gray-800">
-              Jobs mentioning &ldquo;{selectedKeyword}&rdquo;
+              {isLocation ? "Jobs in" : "Jobs mentioning"} &ldquo;{selectedKeyword}&rdquo;
               {keywordTotalCount !== undefined && (
                 <span className="ml-2 text-sm font-normal text-gray-600">
                   {keywordTotalCount} {keywordTotalCount === 1 ? "job" : "jobs"}
                 </span>
               )}
             </h2>
-            <KeywordChip keyword={selectedKeyword} onRemove={clearKeyword} />
+            <KeywordChip
+              keyword={selectedKeyword}
+              onRemove={clearKeyword}
+              prefix={isLocation ? "Location" : "Keyword"}
+            />
           </div>
           {keywordError ? (
             <div className="flex h-32 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-6 text-center text-sm text-red-700">
@@ -243,11 +277,13 @@ export default function InsightsClient({
               currentPage={keywordPage}
               totalPages={keywordTotalPages}
               pageSize={keywordPageSize}
-              listTitle={`Jobs mentioning ${selectedKeyword}`}
+              listTitle={isLocation ? `Jobs in ${selectedKeyword}` : `Jobs mentioning ${selectedKeyword}`}
             />
           ) : (
             <div className="flex h-32 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-6 text-center text-sm text-gray-600">
-              No jobs mention this keyword under the current filters.
+              {isLocation
+                ? "No jobs in this location under the current filters."
+                : "No jobs mention this keyword under the current filters."}
             </div>
           )}
         </section>
@@ -257,6 +293,30 @@ export default function InsightsClient({
         <>
           <div className="mb-8 min-h-64 rounded-xl border border-gray-200 bg-gray-50 p-4">
             {activeCategory === "all" && <Legend />}
+            {isLocation && (
+              <div
+                className="mb-2 flex flex-wrap items-center gap-1"
+                role="radiogroup"
+                aria-label="Location granularity"
+              >
+                {LOCATION_GRANULARITY_VALUES.map((granularity) => (
+                  <button
+                    key={granularity}
+                    type="button"
+                    role="radio"
+                    aria-checked={loc === granularity}
+                    onClick={() => selectLocationGranularity(granularity)}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                      loc === granularity
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-600 hover:border-blue-400"
+                    }`}
+                  >
+                    {LOCATION_GRANULARITY_LABELS[granularity]}
+                  </button>
+                ))}
+              </div>
+            )}
             <div
               className="mb-2 flex flex-wrap items-center justify-between gap-2"
               role="radiogroup"

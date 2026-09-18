@@ -211,6 +211,7 @@ test("rejects malformed scalar values and unknown enums", () => {
     excludeMetro: undefined,
     category: undefined,
     keyword: undefined,
+    loc: undefined,
     query: undefined,
     sortBy: undefined,
     sortOrder: undefined,
@@ -277,4 +278,27 @@ test("URL helpers preserve query and sorts while resetting result position", () 
   params.set("page", "2");
   resetResultPosition(params);
   assert.equal(params.has("page"), false);
+});
+
+test("parses location category and granularity, rejects invalid loc", () => {
+  assert.equal(
+    parseFilterSearchParams({ category: "location", loc: "province" }).category,
+    "location",
+  );
+  assert.equal(
+    parseFilterSearchParams({ category: "location", loc: "province" }).loc,
+    "province",
+  );
+  assert.equal(
+    parseFilterSearchParams({ category: "location", loc: "city" }).loc,
+    "city",
+  );
+  assert.equal(
+    parseFilterSearchParams({ category: "location", loc: "planet" }).loc,
+    undefined,
+  );
+  assert.equal(
+    parseFilterSearchParams({ category: "location" }).loc,
+    undefined,
+  );
 });

@@ -2,7 +2,12 @@ import {
   FILTER_PARAM_KEYS,
   type NextSearchParams,
 } from "./searchParams.ts";
-import type { FilterId, SortField } from "./types.ts";
+import {
+  INSIGHTS_CATEGORY_VALUES,
+  LOCATION_GRANULARITY_VALUES,
+  type FilterId,
+  type SortField,
+} from "./types.ts";
 
 export type SupportedRoute =
   | "/jobs/all"
@@ -145,15 +150,22 @@ export function buildRouteSearchParams(
     const category = sourceValues(source, "category")[0];
     if (
       category &&
-      ["all", "skill", "technology", "certification", "attribute"].includes(
-        category,
-      )
+      (INSIGHTS_CATEGORY_VALUES as readonly string[]).includes(category)
     ) {
       next.set("category", category);
     }
     const keyword = sourceValues(source, "keyword")[0]?.trim();
     if (keyword && keyword.length <= 200) {
       next.set("keyword", keyword);
+    }
+    // Location granularity only lives on /insights; job-list routes never
+    // see it (it is not a filter key, so the allowlist above excludes it).
+    const loc = sourceValues(source, "loc")[0];
+    if (
+      loc &&
+      (LOCATION_GRANULARITY_VALUES as readonly string[]).includes(loc)
+    ) {
+      next.set("loc", loc);
     }
   }
   return next;

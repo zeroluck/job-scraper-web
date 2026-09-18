@@ -22,6 +22,7 @@ import {
   setRepeatedParam,
 } from "@/lib/filters/searchParams";
 import { CANONICAL_ARCHETYPES } from "@/lib/archetypes/registry";
+import { METRO_LABELS, PROVINCE_LABELS } from "@/lib/insights/locations";
 
 export interface JobFiltersSidebarProps {
   supportedFilters: readonly FilterId[];
@@ -58,24 +59,12 @@ const LEVEL_LABELS: Record<string, string> = {
   "Not Applicable": "Seniority unspecified",
 };
 
-const PROVINCE_LABELS: Record<string, string> = {
-  AB: "Alberta", BC: "British Columbia", MB: "Manitoba", NB: "New Brunswick",
-  NL: "Newfoundland and Labrador", NS: "Nova Scotia", NT: "Northwest Territories",
-  NU: "Nunavut", ON: "Ontario", PE: "Prince Edward Island", QC: "Quebec",
-  SK: "Saskatchewan", YT: "Yukon",
-};
 const SCOPE_OPTIONS = [
   { value: "local", label: "Cities and local areas" },
   { value: "province", label: "Province-wide listings" },
   { value: "country", label: "Canada-wide listings" },
 ] as const;
-const METRO_LABELS: Record<string, string> = {
-  toronto: "Toronto", montreal: "Montreal", vancouver: "Vancouver", calgary: "Calgary",
-  edmonton: "Edmonton", ottawa_gatineau: "Ottawa-Gatineau", winnipeg: "Winnipeg",
-  quebec_city: "Quebec City", hamilton: "Hamilton", kitchener_waterloo: "Kitchener-Waterloo",
-  london: "London", halifax: "Halifax", victoria: "Victoria", regina: "Regina",
-  saskatoon: "Saskatoon",
-};
+
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
