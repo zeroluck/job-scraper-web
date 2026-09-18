@@ -15,7 +15,6 @@ import type {
 } from "../filters/types.ts";
 import { parseBooleanSearch, type BooleanSearchNode } from "../jobs/booleanSearch.ts";
 import { compatibleArchetypeValues } from "../archetypes/registry.ts";
-import { metroLabel, provinceLabel } from "../insights/locations.ts";
 
 if (!process.env.NODE_TEST_CONTEXT) {
   await import("server-only");
@@ -883,8 +882,8 @@ export interface LocationInsightsResult {
 
 export interface LocationJobsQueryOptions
   extends LocationInsightsQueryOptions {
-  /** Metro code (city) or province code, null for the Unspecified bucket. */
-  code: string | null;
+  /** Display label as shown in the cloud; resolved server-side. */
+  label: string;
   page?: number;
   pageSize?: number;
 }
@@ -1011,7 +1010,7 @@ export async function executeLocationInsightsQuery(
     p_granularity: granularity,
   });
   const rows = ((await handleResponse(response)) ?? []) as Array<{
-    code?: string | null;
+    label?: string | null;
     count?: number | string | null;
     total_count?: number | string | null;
     last_updated?: string | null;
@@ -1019,13 +1018,18 @@ export async function executeLocationInsightsQuery(
 
   const parsedTotal = Number(rows[0]?.total_count);
   const totalCount = Number.isFinite(parsedTotal) ? parsedTotal : rows.length;
-  const label = granularity === "province" ? provinceLabel : metroLabel;
-  const keywords: KeywordInsight[] = rows.map((row) => ({
-    keyword: label(row.code ?? null),
-    category: "location",
-    count: Number(row.count) || 0,
-    last_updated: row.last_updated ?? null,
-  }));
+  // Labels arrive display-ready from the RPC (metros, cities, scope
+  // buckets); the client passes them through untouched.
+  const keywords: KeywordInsight[] = rows.flatMap((row) =>
+    typeof row.label === "string" && row.label
+      ? [{
+        keyword: row.label,
+        category: "location",
+        count: Number(row.count) || 0,
+        last_updated: row.last_updated ?? null,
+      }]
+      : [],
+  );
   return { keywords, totalCount, granularity };
 }
 
@@ -1038,11 +1042,15 @@ export async function getLocationInsights(
 
 function locationJobsPage(options: LocationJobsQueryOptions): {
   granularity: LocationInsightsGranularity;
-  code: string | null;
+  label: string;
   limit: number;
   offset: number;
 } {
   const granularity = locationGranularityOption(options.granularity);
+  const label = options.label?.trim();
+  if (!label || label.length > 200) {
+    throw new Error("A location label of 1-200 characters is required");
+  }
   const page = safePositiveInteger(options.page, 1);
   const requestedPageSize = Math.trunc(finiteNumber(options.pageSize) ?? 25);
   const limit = Math.min(
@@ -1051,7 +1059,7 @@ function locationJobsPage(options: LocationJobsQueryOptions): {
   );
   return {
     granularity,
-    code: options.code ?? null,
+    label,
     limit,
     offset: (page - 1) * limit,
   };
@@ -1061,9 +1069,7 @@ export async function executeLocationJobsQuery(
   supabase: any,
   options: LocationJobsQueryOptions,
 ): Promise<{ jobIds: string[]; totalCount: number }> {
-  const { granularity, code, limit, offset } = locationJobsPage(options);
-  // Empty string is the null-bucket sentinel (codes are never empty).
-  // p_granularity selects which predicate applies; the other is ignored.
+  const { granularity, label, limit, offset } = locationJobsPage(options);
   const response = await supabase.rpc("get_location_job_ids", {
     p_providers: arrayOption(options.providers, options.provider),
     p_archetypes: compatibleArchetypeValues(
@@ -1077,8 +1083,7 @@ export async function executeLocationJobsQuery(
     p_location_scopes: nonEmpty(options.locationScopes),
     p_exclude_metros: nonEmpty(options.excludeMetros),
     p_granularity: granularity,
-    p_metro: granularity === "city" ? (code ?? "") : "",
-    p_province: granularity === "province" ? (code ?? "") : "",
+    p_label: label,
     p_limit: limit,
     p_offset: offset,
   });

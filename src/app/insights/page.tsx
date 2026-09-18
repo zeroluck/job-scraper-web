@@ -14,7 +14,6 @@ import {
   INSIGHTS_KEYWORD_LIMIT,
   type LocationInsightsGranularity,
 } from "@/lib/supabase/queries";
-import { resolveLocationSelectionIn } from "@/lib/insights/locations";
 import { CANONICAL_ARCHETYPES, archetypeLabel } from "@/lib/archetypes/registry";
 
 const INSIGHTS_FILTERS = ROUTE_FILTERS["/insights"];
@@ -86,7 +85,6 @@ async function InsightsResults({
   keywordPage,
   keywordPageSize,
   locationGranularity,
-  locationSelection,
 }: {
   filtersKey: string;
   scopeLabel: string;
@@ -96,7 +94,6 @@ async function InsightsResults({
   keywordPage: number;
   keywordPageSize: 10 | 25 | 100;
   locationGranularity?: LocationInsightsGranularity;
-  locationSelection?: { code: string | null };
 }) {
   void filtersKey;
   if (locationGranularity) {
@@ -105,7 +102,6 @@ async function InsightsResults({
         scopeLabel={scopeLabel}
         queryOptions={queryOptions}
         granularity={locationGranularity}
-        selection={locationSelection}
         selectedKeyword={selectedKeyword}
         keywordPage={keywordPage}
         keywordPageSize={keywordPageSize}
@@ -175,7 +171,6 @@ async function LocationResults({
   scopeLabel,
   queryOptions,
   granularity,
-  selection,
   selectedKeyword,
   keywordPage,
   keywordPageSize,
@@ -183,7 +178,6 @@ async function LocationResults({
   scopeLabel: string;
   queryOptions: Parameters<typeof getCachedKeywordInsights>[0];
   granularity: LocationInsightsGranularity;
-  selection?: { code: string | null };
   selectedKeyword?: string;
   keywordPage: number;
   keywordPageSize: 10 | 25 | 100;
@@ -194,35 +188,11 @@ async function LocationResults({
   void _limit;
   let result: Awaited<ReturnType<typeof getCachedLocationInsights>> | undefined;
   let errorMessage: string | undefined;
-  let jobsResult: Awaited<ReturnType<typeof getLocationJobs>> | undefined;
-  let jobsError: string | undefined;
-  const [insightsOutcome, jobsOutcome] = await Promise.allSettled([
-    getCachedLocationInsights({ ...locationFilters, granularity }),
-    selection && selectedKeyword
-      ? getLocationJobs({
-        ...locationFilters,
-        granularity,
-        code: selection.code,
-        page: keywordPage,
-        pageSize: keywordPageSize,
-      })
-      : Promise.resolve(undefined),
-  ]);
-  if (insightsOutcome.status === "fulfilled") {
-    result = insightsOutcome.value;
-  } else {
+  try {
+    result = await getCachedLocationInsights({ ...locationFilters, granularity });
+  } catch (error) {
     errorMessage =
-      insightsOutcome.reason instanceof Error
-        ? insightsOutcome.reason.message
-        : "Failed to load location insights.";
-  }
-  if (jobsOutcome.status === "fulfilled") {
-    jobsResult = jobsOutcome.value;
-  } else {
-    jobsError =
-      jobsOutcome.reason instanceof Error
-        ? jobsOutcome.reason.message
-        : "Failed to load location jobs.";
+      error instanceof Error ? error.message : "Failed to load location insights.";
   }
 
   if (!result) {
@@ -231,6 +201,30 @@ async function LocationResults({
         {errorMessage}
       </div>
     );
+  }
+
+  // A drill-down label is only honored when it names a bucket in the
+  // current cloud, so keywords from other tabs (or the other granularity)
+  // can never leak into the locations list.
+  const validSelection = selectedKeyword &&
+      result.keywords.some((k) => k.keyword === selectedKeyword)
+    ? selectedKeyword
+    : undefined;
+  let jobsResult: Awaited<ReturnType<typeof getLocationJobs>> | undefined;
+  let jobsError: string | undefined;
+  if (validSelection) {
+    try {
+      jobsResult = await getLocationJobs({
+        ...locationFilters,
+        granularity,
+        label: validSelection,
+        page: keywordPage,
+        pageSize: keywordPageSize,
+      });
+    } catch (error) {
+      jobsError =
+        error instanceof Error ? error.message : "Failed to load location jobs.";
+    }
   }
 
   return (
@@ -243,7 +237,7 @@ async function LocationResults({
       lastUpdated={result.keywords[0]?.last_updated ?? null}
       activeCategory="location"
       loc={granularity}
-      selectedKeyword={selection ? selectedKeyword : undefined}
+      selectedKeyword={validSelection}
       keywordJobs={jobsResult?.jobs}
       keywordTotalCount={jobsResult?.totalCount}
       keywordPage={keywordPage}
@@ -268,11 +262,6 @@ export default async function InsightsPage({
     : [...KNOWN_ARCHETYPES];
   const activeCategory = filters.category ?? "all";
   const loc = filters.loc ?? "city";
-  // Location drill-down labels resolve within the active granularity so a
-  // keyword from another tab (or the other granularity) never leaks in.
-  const locationSelection = activeCategory === "location"
-    ? resolveLocationSelectionIn(filters.keyword, loc) ?? undefined
-    : undefined;
   const rawNavigation = parseFilterSearchParams(rawParams);
   const keywordPage = parsePageParam(rawParams) ?? 1;
   const keywordPageSize = rawNavigation.pageSize ?? 25;
@@ -308,7 +297,6 @@ export default async function InsightsPage({
           keywordPage={keywordPage}
           keywordPageSize={keywordPageSize}
           locationGranularity={activeCategory === "location" ? loc : undefined}
-          locationSelection={locationSelection}
         />
       </Suspense>
     </div>
