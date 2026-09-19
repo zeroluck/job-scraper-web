@@ -47,7 +47,8 @@ test("map weights use stable logarithmic ceilings", () => {
   assert.equal(mapWeight(0, "density", false), 0);
   assert.equal(mapWeight(500, "density", false), 1);
   assert.equal(mapWeight(2500, "density", false), 1);
-  assert.ok(mapWeight(25, "contention", false) < mapWeight(250, "contention", false));
+  assert.ok(mapWeight(1, "contention", false) < mapWeight(8, "contention", false));
+  assert.equal(mapWeight(20, "contention", false), 1);
 });
 
 test("bubble radii make large markets prominent without exceeding the map cap", () => {
@@ -57,7 +58,7 @@ test("bubble radii make large markets prominent without exceeding the map cap", 
   assert.equal(twoJobs, 3);
   assert.ok(vancouver > twoJobs * 6);
   assert.equal(bubbleRadius(10000, "density", false), 32);
-  assert.equal(bubbleRadius(1000, "contention", false), 32);
+  assert.equal(bubbleRadius(20, "contention", false), 32);
 });
 
 test("overlap selection prioritizes the smallest bubble", () => {
@@ -72,14 +73,14 @@ test("overlap selection prioritizes the smallest bubble", () => {
 });
 
 test("mapping and opportunity selection enforce data quality", () => {
-  const lowCompetition = location({ keyword: "Kingston", count: 20, stabilized_per_100k: 50, applicants_per_hour: 1, contention_jobs: 10 });
+  const lowCompetition = location({ keyword: "Kingston", count: 20, stabilized_per_100k: 50, applicants_per_hour: 1, contention_jobs: 10, observed_contention_jobs: 8 });
   const busy = location({ keyword: "Toronto", count: 100, stabilized_per_100k: 60, applicants_per_hour: 10, contention_jobs: 80 });
   const lowCoverage = location({ keyword: "Unknown", stabilized_per_100k: 100, applicants_per_hour: 0.1, contention_jobs: 1 });
   const unmapped = location({ keyword: "Unmapped", latitude: null, longitude: null });
 
   assert.equal(contentionCoverage(lowCompetition), 0.5);
   assert.equal(mappedLocations([lowCompetition, unmapped]).length, 1);
-  assert.equal(opportunityLocation([busy, lowCompetition, lowCoverage])?.keyword, "Kingston");
+  assert.equal(opportunityLocation([busy, lowCompetition, lowCoverage], true, true)?.keyword, "Kingston");
 });
 
 test("mapped locations omit city buckets that the label resolver treats as metros", () => {

@@ -18,7 +18,7 @@ const cachedFetch = unstable_cache(
     const supabase = createSupabaseServiceClient();
     return executeLocationInsightsQuery(supabase, options);
   },
-  ["location-insights-v5-map"],
+  ["location-insights-v6-contention"],
   { revalidate: 3600, tags: ["location-insights"] },
 );
 

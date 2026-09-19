@@ -15,12 +15,12 @@ export function mapMetric(
 }
 
 export function mapWeight(value: number, mode: LocationMapMode, perCapita: boolean): number {
-  const ceiling = mode === "contention" ? 250 : perCapita ? 100 : 500;
+  const ceiling = mode === "contention" ? 8 : perCapita ? 100 : 500;
   return Math.min(1, Math.log1p(Math.max(value, 0)) / Math.log1p(ceiling));
 }
 
 export function bubbleRadius(value: number, mode: LocationMapMode, perCapita: boolean): number {
-  const ceiling = mode === "contention" ? 40 : perCapita ? 100 : 2500;
+  const ceiling = mode === "contention" ? 8 : perCapita ? 100 : 2500;
   return Math.max(3, 32 * Math.sqrt(Math.min(1, Math.max(value, 0) / ceiling)));
 }
 
@@ -52,18 +52,22 @@ export function mappedLocations(locations: LocationInsight[]): LocationInsight[]
   return [...byLabel.values()];
 }
 
-export function opportunityLocation(locations: LocationInsight[]): LocationInsight | null {
+export function opportunityLocation(
+  locations: LocationInsight[],
+  perCapita = true,
+  stabilized = true,
+): LocationInsight | null {
   const eligible = locations.filter(
     (location) =>
       location.applicants_per_hour != null &&
-      contentionCoverage(location) >= 0.25 &&
-      location.count >= 2,
+      contentionCoverage(location) >= 0.15 &&
+      location.contention_jobs >= 5,
   );
   return eligible.reduce<LocationInsight | null>((best, location) => {
-    const availability = location.stabilized_per_100k ?? location.per_100k ?? location.count;
+    const availability = mapMetric(location, "density", perCapita, stabilized) ?? location.count;
     const score = availability / (1 + (location.applicants_per_hour ?? 0));
     if (!best) return location;
-    const bestAvailability = best.stabilized_per_100k ?? best.per_100k ?? best.count;
+    const bestAvailability = mapMetric(best, "density", perCapita, stabilized) ?? best.count;
     const bestScore = bestAvailability / (1 + (best.applicants_per_hour ?? 0));
     return score > bestScore ? location : best;
   }, null);
