@@ -1059,6 +1059,7 @@ export async function executeLocationInsightsQuery(
     p_posted_before: dateBounds.postedBefore ?? null,
   });
   const rows = ((await handleResponse(response)) ?? []) as Array<{
+    bucket?: string | null;
     label?: string | null;
     count?: number | string | null;
     total_count?: number | string | null;
@@ -1069,6 +1070,13 @@ export async function executeLocationInsightsQuery(
     rate_reliability?: number | string | null;
     geo_match_quality?: LocationInsight["geo_match_quality"];
     is_cma_component?: boolean | null;
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+    contention_jobs?: number | string | null;
+    observed_contention_jobs?: number | string | null;
+    applicants_per_hour?: number | string | null;
+    initial_applicants_median?: number | string | null;
+    first_observation_lag_hours?: number | string | null;
   }>;
 
   const parsedTotal = Number(rows[0]?.total_count);
@@ -1081,9 +1089,15 @@ export async function executeLocationInsightsQuery(
     const perCapita = row.per_100k == null ? NaN : Number(row.per_100k);
     const stabilized = row.stabilized_per_100k == null ? NaN : Number(row.stabilized_per_100k);
     const reliability = row.rate_reliability == null ? NaN : Number(row.rate_reliability);
+    const latitude = row.latitude == null ? NaN : Number(row.latitude);
+    const longitude = row.longitude == null ? NaN : Number(row.longitude);
+    const applicantsPerHour = row.applicants_per_hour == null ? NaN : Number(row.applicants_per_hour);
+    const initialApplicants = row.initial_applicants_median == null ? NaN : Number(row.initial_applicants_median);
+    const observationLag = row.first_observation_lag_hours == null ? NaN : Number(row.first_observation_lag_hours);
     return [{
       keyword: row.label,
       category: "location",
+      bucket: typeof row.bucket === "string" ? row.bucket : row.label,
       count: Number(row.count) || 0,
       last_updated: row.last_updated ?? null,
       population_2021: Number.isFinite(population) ? population : null,
@@ -1092,6 +1106,13 @@ export async function executeLocationInsightsQuery(
       rate_reliability: Number.isFinite(reliability) ? reliability : null,
       geo_match_quality: row.geo_match_quality ?? null,
       is_cma_component: row.is_cma_component ?? null,
+      latitude: Number.isFinite(latitude) ? latitude : null,
+      longitude: Number.isFinite(longitude) ? longitude : null,
+      contention_jobs: Number(row.contention_jobs) || 0,
+      observed_contention_jobs: Number(row.observed_contention_jobs) || 0,
+      applicants_per_hour: Number.isFinite(applicantsPerHour) ? applicantsPerHour : null,
+      initial_applicants_median: Number.isFinite(initialApplicants) ? initialApplicants : null,
+      first_observation_lag_hours: Number.isFinite(observationLag) ? observationLag : null,
     }];
   });
   return { keywords, totalCount, granularity };

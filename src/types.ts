@@ -27,12 +27,20 @@ export interface KeywordInsight {
 
 export interface LocationInsight extends KeywordInsight {
   category: "location";
+  bucket: string;
   population_2021: number | null;
   per_100k: number | null;
   stabilized_per_100k: number | null;
   rate_reliability: number | null;
   geo_match_quality: "exact" | "parent" | "cross_province" | "region" | "foreign" | "unknown" | null;
   is_cma_component: boolean | null;
+  latitude: number | null;
+  longitude: number | null;
+  contention_jobs: number;
+  observed_contention_jobs: number;
+  applicants_per_hour: number | null;
+  initial_applicants_median: number | null;
+  first_observation_lag_hours: number | null;
 }
 
 export interface ListingInstance {

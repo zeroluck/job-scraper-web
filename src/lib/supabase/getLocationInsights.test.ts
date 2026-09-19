@@ -18,6 +18,7 @@ test("location insights default to unfolded cities and parse census rates", asyn
   const { supabase, call } = stubRpc([
     {
       label: "Mississauga",
+      bucket: "c:mississauga|on",
       count: 417,
       total_count: 900,
       last_updated: null,
@@ -27,6 +28,13 @@ test("location insights default to unfolded cities and parse census rates", asyn
       rate_reliability: 0.93,
       geo_match_quality: "exact",
       is_cma_component: true,
+      latitude: 43.589,
+      longitude: -79.644,
+      contention_jobs: 200,
+      observed_contention_jobs: 150,
+      applicants_per_hour: 4.25,
+      initial_applicants_median: 12,
+      first_observation_lag_hours: 3.5,
     },
     {
       label: "Unspecified",
@@ -54,6 +62,7 @@ test("location insights default to unfolded cities and parse census rates", asyn
   assert.deepEqual(result.keywords[0], {
     keyword: "Mississauga",
     category: "location",
+    bucket: "c:mississauga|on",
     count: 417,
     last_updated: null,
     population_2021: 717961,
@@ -62,6 +71,13 @@ test("location insights default to unfolded cities and parse census rates", asyn
     rate_reliability: 0.93,
     geo_match_quality: "exact",
     is_cma_component: true,
+    latitude: 43.589,
+    longitude: -79.644,
+    contention_jobs: 200,
+    observed_contention_jobs: 150,
+    applicants_per_hour: 4.25,
+    initial_applicants_median: 12,
+    first_observation_lag_hours: 3.5,
   });
   assert.equal(result.keywords[1]?.per_100k, null);
   assert.equal(result.keywords[1]?.stabilized_per_100k, null);

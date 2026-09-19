@@ -33,6 +33,18 @@ const WordCloudClient = dynamic(() => import("./WordCloudClient"), {
   ),
 });
 
+const LocationMapClient = dynamic(() => import("./LocationMapClient"), {
+  ssr: false,
+  loading: () => (
+    <div
+      aria-label="Loading location map"
+      className="mb-6 flex h-[430px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 sm:h-[520px]"
+    >
+      Loading location map…
+    </div>
+  ),
+});
+
 const LOCATION_GRANULARITY_LABELS: Record<LocationGranularity, string> = {
   city: "City",
   province: "State / Province",
@@ -538,6 +550,15 @@ export default function InsightsClient({
                   <span className="ml-1 text-xs text-gray-500">Standalone Canadian communities under 100k; CMA components excluded.</span>
                 )}
               </div>
+            )}
+            {isLocation && (
+              <LocationMapClient
+                locations={keywords as LocationInsight[]}
+                selectedKeyword={selectedKeyword}
+                perCapita={perCapitaActive}
+                stabilized={stabilizedRate}
+                onLocationClick={selectKeyword}
+              />
             )}
             <div
               className="mb-2 flex flex-wrap items-center justify-between gap-2"

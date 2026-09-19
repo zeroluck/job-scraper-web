@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 @plugin "@tailwindcss/typography";
 @plugin "@tailwindcss/forms";
 
@@ -33,4 +34,3 @@
   --background: #ffffff;
   --foreground: #171717;
 }
-
