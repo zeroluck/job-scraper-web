@@ -13,11 +13,13 @@ import * as maplibregl from "maplibre-gl";
 
 import type { LocationInsight } from "@/types";
 import {
+  bubbleRadius,
   contentionCoverage,
   mapMetric,
   mapWeight,
   mappedLocations,
   opportunityLocation,
+  smallestBubble,
   type LocationMapMode,
 } from "./locationMapMetrics";
 
@@ -54,12 +56,41 @@ type MapFeatureProperties = {
   label: string;
   count: number;
   metric: number;
+  bubbleRadius: number;
+  bubbleVisible: boolean;
+  densityVisible: boolean;
+  contentionVisible: boolean;
+  densityWeight: number;
+  contentionWeight: number;
   rate: number;
   coverage: number;
   initialApplicants: number;
   observationLag: number;
   observedJobs: number;
 };
+
+type HeatmapVisibility = {
+  density: boolean;
+  contention: boolean;
+};
+
+const DENSITY_HEAT_COLORS: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["heatmap-density"],
+  0, "rgba(186,230,253,0)",
+  0.16, "rgba(125,211,252,0.72)",
+  0.38, "rgba(56,189,248,0.82)",
+  0.68, "rgba(2,132,199,0.9)",
+  1, "rgba(12,74,110,0.96)",
+];
+
+const CONTENTION_HEAT_COLORS: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["heatmap-density"],
+  0, "rgba(254,240,138,0)",
+  0.16, "rgba(253,224,71,0.72)",
+  0.38, "rgba(251,146,60,0.82)",
+  0.68, "rgba(234,88,12,0.9)",
+  1, "rgba(153,27,27,0.96)",
+];
 
 type HoveredFeature = MapFeatureProperties & {
   longitude: number;
@@ -88,14 +119,23 @@ export default function LocationMapClient({
   const availableLocations = useMemo(() => mappedLocations(locations), [locations]);
   const hasContention = locations.some((location) => location.applicants_per_hour != null);
   const [mode, setMode] = useState<LocationMapMode>("density");
+  const [heatmaps, setHeatmaps] = useState<HeatmapVisibility>({
+    density: true,
+    contention: false,
+  });
   const [hovered, setHovered] = useState<HoveredFeature | null>(null);
   const activeMode = mode === "contention" && !hasContention ? "density" : mode;
+  const showDensityHeat = heatmaps.density;
+  const showContentionHeat = heatmaps.contention && hasContention;
+  const bothHeatmaps = showDensityHeat && showContentionHeat;
 
   const featureCollection = useMemo(() => ({
     type: "FeatureCollection" as const,
     features: availableLocations.flatMap((location) => {
-      const metric = mapMetric(location, activeMode, perCapita, stabilized);
-      if (metric == null || location.longitude == null || location.latitude == null) return [];
+      const densityMetric = mapMetric(location, "density", perCapita, stabilized);
+      const contentionMetric = mapMetric(location, "contention", perCapita, stabilized);
+      const metric = activeMode === "contention" ? contentionMetric : densityMetric;
+      if (location.longitude == null || location.latitude == null) return [];
       return [{
         type: "Feature" as const,
         id: location.bucket,
@@ -106,8 +146,13 @@ export default function LocationMapClient({
         properties: {
           label: location.keyword,
           count: location.count,
-          metric,
-          weight: mapWeight(metric, activeMode, perCapita),
+          metric: metric ?? -1,
+          bubbleRadius: metric == null ? 0 : bubbleRadius(metric, activeMode, perCapita),
+          bubbleVisible: metric != null,
+          densityVisible: densityMetric != null,
+          contentionVisible: contentionMetric != null,
+          densityWeight: densityMetric == null ? 0 : mapWeight(densityMetric, "density", perCapita),
+          contentionWeight: contentionMetric == null ? 0 : mapWeight(contentionMetric, "contention", false),
           rate: location.applicants_per_hour ?? -1,
           coverage: contentionCoverage(location),
           initialApplicants: location.initial_applicants_median ?? -1,
@@ -151,7 +196,10 @@ export default function LocationMapClient({
   const mappedShare = totalJobs ? mappedJobs / totalJobs : 0;
 
   const onMouseMove = (event: MapLayerMouseEvent) => {
-    const feature = event.features?.[0];
+    const feature = smallestBubble(
+      event.features ?? [],
+      (candidate) => Number(candidate.properties?.bubbleRadius ?? Number.POSITIVE_INFINITY),
+    );
     if (!feature || feature.geometry.type !== "Point") {
       setHovered(null);
       return;
@@ -165,27 +213,14 @@ export default function LocationMapClient({
   };
 
   const onClick = (event: MapLayerMouseEvent) => {
-    const label = event.features?.[0]?.properties?.label;
+    const feature = smallestBubble(
+      event.features ?? [],
+      (candidate) => Number(candidate.properties?.bubbleRadius ?? Number.POSITIVE_INFINITY),
+    );
+    const label = feature?.properties?.label;
     if (typeof label === "string") onLocationClick(label, "location");
   };
 
-  const heatColors = useMemo(() => activeMode === "contention"
-    ? ([
-      "interpolate", ["linear"], ["heatmap-density"],
-      0, "rgba(255,247,237,0)",
-      0.2, "rgb(254,215,170)",
-      0.45, "rgb(251,146,60)",
-      0.7, "rgb(234,88,12)",
-      1, "rgb(153,27,27)",
-    ] as maplibregl.ExpressionSpecification)
-    : ([
-      "interpolate", ["linear"], ["heatmap-density"],
-      0, "rgba(240,253,250,0)",
-      0.2, "rgb(153,246,228)",
-      0.45, "rgb(45,212,191)",
-      0.7, "rgb(13,148,136)",
-      1, "rgb(17,94,89)",
-    ] as maplibregl.ExpressionSpecification), [activeMode]);
   const mapStyle = useMemo<maplibregl.StyleSpecification>(() => ({
     ...MAP_STYLE,
     sources: {
@@ -194,45 +229,69 @@ export default function LocationMapClient({
     },
     layers: [
       ...MAP_STYLE.layers,
-      {
-        id: "job-area-heat",
+      ...(showDensityHeat ? [{
+        id: "job-area-density-heat",
         type: "heatmap",
         source: "job-areas",
-        maxzoom: 10,
+        maxzoom: 11,
+        filter: ["==", ["get", "densityVisible"], true],
         paint: {
-          "heatmap-weight": ["get", "weight"],
-          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 1, 0.8, 8, 2.1],
-          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 1, 15, 8, 42],
-          "heatmap-color": heatColors,
-          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.82, 10, 0.18],
+          "heatmap-weight": ["get", "densityWeight"],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 1, 0.72, 9, 1.75],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 1, 30, 9, 74],
+          "heatmap-color": DENSITY_HEAT_COLORS,
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 1, bothHeatmaps ? 0.44 : 0.62, 9, bothHeatmaps ? 0.4 : 0.56, 11, 0.12],
         },
-      },
+      }] : []),
+      ...(showContentionHeat ? [{
+        id: "job-area-contention-heat",
+        type: "heatmap",
+        source: "job-areas",
+        maxzoom: 11,
+        filter: ["==", ["get", "contentionVisible"], true],
+        paint: {
+          "heatmap-weight": ["get", "contentionWeight"],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 1, 0.68, 9, 1.65],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 1, 34, 9, 80],
+          "heatmap-color": CONTENTION_HEAT_COLORS,
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 1, bothHeatmaps ? 0.42 : 0.6, 9, bothHeatmaps ? 0.38 : 0.54, 11, 0.12],
+        },
+      }] : []),
       {
         id: "job-area-points",
         type: "circle",
         source: "job-areas",
+        filter: ["==", ["get", "bubbleVisible"], true],
+        layout: {
+          "circle-sort-key": ["*", -1, ["get", "bubbleRadius"]],
+        },
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["get", "weight"], 0, 4, 1, 16],
-          "circle-color": activeMode === "contention" ? "#c2410c" : "#0f766e",
-          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 1, 0.45, 6, 0.88],
+          "circle-radius": ["get", "bubbleRadius"],
+          "circle-color": activeMode === "contention" ? "#9f1239" : "#334155",
+          "circle-opacity": 0.62,
           "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-width": 1.25,
+          "circle-stroke-opacity": 0.9,
         },
       },
       {
         id: "selected-job-area",
         type: "circle",
         source: "job-areas",
-        filter: ["==", ["get", "label"], selectedKeyword ?? ""],
+        filter: ["all", ["==", ["get", "bubbleVisible"], true], ["==", ["get", "label"], selectedKeyword ?? ""]],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["get", "weight"], 0, 9, 1, 21],
+          "circle-radius": ["+", ["get", "bubbleRadius"], 5],
           "circle-color": "rgba(255,255,255,0)",
           "circle-stroke-color": "#0f172a",
           "circle-stroke-width": 3,
         },
       },
     ],
-  }) as maplibregl.StyleSpecification, [activeMode, featureCollection, heatColors, selectedKeyword]);
+  }) as maplibregl.StyleSpecification, [activeMode, bothHeatmaps, featureCollection, selectedKeyword, showContentionHeat, showDensityHeat]);
+
+  const toggleHeatmap = (heatmap: keyof HeatmapVisibility) => {
+    setHeatmaps((current) => ({ ...current, [heatmap]: !current[heatmap] }));
+  };
 
   return (
     <section aria-labelledby="location-map-title" className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -245,27 +304,59 @@ export default function LocationMapClient({
             <h2 id="location-map-title" className="text-lg font-semibold text-slate-900">Where opportunity is concentrated</h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">Click an area to inspect its jobs. Density and applicant activity use the same committed filters as every other insight.</p>
           </div>
-          <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm" role="radiogroup" aria-label="Map layer">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={activeMode === "density"}
-              onClick={() => setMode("density")}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${activeMode === "density" ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-50"}`}
-            >
-              Density
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={activeMode === "contention"}
-              disabled={!hasContention}
-              title={hasContention ? "Show reported applicant activity" : "No applicant observations under these filters"}
-              onClick={() => setMode("contention")}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${activeMode === "contention" ? "bg-orange-700 text-white" : "text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"}`}
-            >
-              Contention
-            </button>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Bubbles</p>
+              <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm" role="radiogroup" aria-label="Bubble metric">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeMode === "density"}
+                  onClick={() => setMode("density")}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${activeMode === "density" ? "bg-slate-700 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                >
+                  Density
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={activeMode === "contention"}
+                  disabled={!hasContention}
+                  title={hasContention ? "Size bubbles by reported applicant activity" : "No applicant observations under these filters"}
+                  onClick={() => setMode("contention")}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${activeMode === "contention" ? "bg-rose-800 text-white" : "text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"}`}
+                >
+                  Contention
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Heatmaps</p>
+              <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm" role="group" aria-label="Heatmap visibility">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showDensityHeat}
+                  onClick={() => toggleHeatmap("density")}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${showDensityHeat ? "bg-sky-700 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${showDensityHeat ? "bg-sky-200" : "bg-sky-500"}`} aria-hidden="true" />
+                  Density
+                </button>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showContentionHeat}
+                  disabled={!hasContention}
+                  title={hasContention ? "Toggle applicant contention heat" : "No applicant observations under these filters"}
+                  onClick={() => toggleHeatmap("contention")}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${showContentionHeat ? "bg-orange-700 text-white" : "text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${showContentionHeat ? "bg-amber-200" : "bg-orange-500"}`} aria-hidden="true" />
+                  Contention
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -326,11 +417,14 @@ export default function LocationMapClient({
           </Map>
           <div className="pointer-events-none absolute bottom-7 right-2 rounded-lg border border-white/70 bg-white/90 px-3 py-2 shadow-md backdrop-blur">
             <div className="flex items-center gap-2 text-xs font-medium text-slate-700">
-              {activeMode === "contention" ? <Flame className="h-3.5 w-3.5 text-orange-700" /> : <MapPin className="h-3.5 w-3.5 text-teal-700" />}
-              <span>Low</span>
-              <span className={`h-2.5 w-24 rounded-full ${activeMode === "contention" ? "bg-gradient-to-r from-orange-100 via-orange-400 to-red-800" : "bg-gradient-to-r from-teal-100 via-teal-400 to-teal-900"}`} />
-              <span>High</span>
+              {activeMode === "contention" ? <Flame className="h-3.5 w-3.5 text-rose-800" /> : <MapPin className="h-3.5 w-3.5 text-slate-700" />}
+              <span>Bubbles</span>
+              <span className={`h-2 w-2 rounded-full ${activeMode === "contention" ? "bg-rose-800" : "bg-slate-700"}`} />
+              <span className={`h-3 w-3 rounded-full ${activeMode === "contention" ? "bg-rose-800" : "bg-slate-700"}`} />
+              <span className={`h-4 w-4 rounded-full ${activeMode === "contention" ? "bg-rose-800" : "bg-slate-700"}`} />
             </div>
+            {showDensityHeat && <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-600"><span className="w-20">Density heat</span><span className="h-2 w-20 rounded-full bg-gradient-to-r from-sky-100 via-sky-400 to-sky-900" /></div>}
+            {showContentionHeat && <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-600"><span className="w-20">Contention heat</span><span className="h-2 w-20 rounded-full bg-gradient-to-r from-yellow-200 via-orange-400 to-red-800" /></div>}
           </div>
         </div>
       ) : (

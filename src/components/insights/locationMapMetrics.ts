@@ -19,6 +19,18 @@ export function mapWeight(value: number, mode: LocationMapMode, perCapita: boole
   return Math.min(1, Math.log1p(Math.max(value, 0)) / Math.log1p(ceiling));
 }
 
+export function bubbleRadius(value: number, mode: LocationMapMode, perCapita: boolean): number {
+  const ceiling = mode === "contention" ? 40 : perCapita ? 100 : 2500;
+  return Math.max(3, 32 * Math.sqrt(Math.min(1, Math.max(value, 0) / ceiling)));
+}
+
+export function smallestBubble<T>(items: readonly T[], radius: (item: T) => number): T | undefined {
+  return items.reduce<T | undefined>((smallest, item) => {
+    if (!smallest) return item;
+    return radius(item) < radius(smallest) ? item : smallest;
+  }, undefined);
+}
+
 export function contentionCoverage(location: LocationInsight): number {
   return location.count > 0 ? location.contention_jobs / location.count : 0;
 }

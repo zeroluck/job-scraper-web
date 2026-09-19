@@ -3,11 +3,13 @@ import test from "node:test";
 
 import type { LocationInsight } from "../../types.ts";
 import {
+  bubbleRadius,
   contentionCoverage,
   mapMetric,
   mapWeight,
   mappedLocations,
   opportunityLocation,
+  smallestBubble,
 } from "./locationMapMetrics.ts";
 
 function location(overrides: Partial<LocationInsight> = {}): LocationInsight {
@@ -46,6 +48,27 @@ test("map weights use stable logarithmic ceilings", () => {
   assert.equal(mapWeight(500, "density", false), 1);
   assert.equal(mapWeight(2500, "density", false), 1);
   assert.ok(mapWeight(25, "contention", false) < mapWeight(250, "contention", false));
+});
+
+test("bubble radii make large markets prominent without exceeding the map cap", () => {
+  const twoJobs = bubbleRadius(2, "density", false);
+  const vancouver = bubbleRadius(993, "density", false);
+
+  assert.equal(twoJobs, 3);
+  assert.ok(vancouver > twoJobs * 6);
+  assert.equal(bubbleRadius(10000, "density", false), 32);
+  assert.equal(bubbleRadius(1000, "contention", false), 32);
+});
+
+test("overlap selection prioritizes the smallest bubble", () => {
+  const bubbles = [
+    { label: "large", radius: 30 },
+    { label: "small", radius: 4 },
+    { label: "medium", radius: 12 },
+  ];
+
+  assert.equal(smallestBubble(bubbles, (bubble) => bubble.radius)?.label, "small");
+  assert.equal(smallestBubble([], (bubble: { radius: number }) => bubble.radius), undefined);
 });
 
 test("mapping and opportunity selection enforce data quality", () => {
