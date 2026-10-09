@@ -18,7 +18,7 @@ const cachedFetch = unstable_cache(
     const supabase = createSupabaseServiceClient();
     return executeKeywordInsightsQuery(supabase, options);
   },
-  ["keyword-insights-v1"],
+  ["keyword-insights-v5"],
   { revalidate: 3600, tags: ["keyword-insights"] },
 );
 
