@@ -835,10 +835,113 @@ function keywordFilterStatus(
   return "unfiltered";
 }
 
+export const HOT_KEYWORD_INSIGHTS_SHAPE = "v1:default";
+const HOT_KEYWORD_INSIGHTS_ARCHETYPES: readonly string[] = [
+  "technology_delivery",
+  "software_tpm",
+  "systems_platform_ops",
+  "network_infrastructure",
+  "datacenter_operations",
+  "ai_workflow_automation",
+  "building_controls",
+];
+const HOT_KEYWORD_INSIGHTS_CATEGORIES: readonly string[] = [
+  "skill",
+  "technology",
+  "certification",
+  "attribute",
+];
+
+export interface HotKeywordInsightsShape {
+  shapeKey: string;
+  category: string | null;
+}
+
+export function hotKeywordInsightsShape(
+  options: KeywordInsightsQueryOptions = {},
+): HotKeywordInsightsShape | null {
+  if (options.providers !== undefined || options.provider !== undefined) {
+    return null;
+  }
+  const archetypes = compatibleArchetypeValues(
+    arrayOption(options.archetypes, options.archetype) ?? [],
+  );
+  if (
+    archetypes.length !== HOT_KEYWORD_INSIGHTS_ARCHETYPES.length ||
+    !archetypes.every((value) => HOT_KEYWORD_INSIGHTS_ARCHETYPES.includes(value))
+  ) {
+    return null;
+  }
+  if (
+    nonEmpty(options.levels) !== null ||
+    nonEmpty(options.companies) !== null ||
+    nonEmpty(options.jobTitles) !== null ||
+    nonEmpty(options.provinces) !== null ||
+    nonEmpty(options.locationScopes) !== null ||
+    nonEmpty(options.excludeMetros) !== null
+  ) {
+    return null;
+  }
+  if (options.filterStatus !== undefined && options.filterStatus !== "unfiltered") {
+    return null;
+  }
+  if (options.minCount !== undefined && options.minCount !== 2) {
+    return null;
+  }
+  const category = options.category;
+  if (category === undefined || category === "all") {
+    return { shapeKey: HOT_KEYWORD_INSIGHTS_SHAPE, category: null };
+  }
+  if (!HOT_KEYWORD_INSIGHTS_CATEGORIES.includes(category)) {
+    return null;
+  }
+  return { shapeKey: HOT_KEYWORD_INSIGHTS_SHAPE, category };
+}
+
+export async function executeHotKeywordInsightsQuery(
+  supabase: any,
+  shape: HotKeywordInsightsShape,
+  limit?: number,
+): Promise<KeywordInsightsResult> {
+  const bounded = normalizeInsightsLimit(limit);
+  let query = supabase
+    .from("keyword_insights_summary")
+    .select("keyword, category, count, last_updated", { count: "exact" })
+    .eq("shape_key", shape.shapeKey)
+    .order("count", { ascending: false })
+    .order("keyword", { ascending: true })
+    .limit(bounded);
+  if (shape.category) {
+    query = query.eq("category", shape.category);
+  }
+  const response = await query;
+  const rows = ((await handleResponse(response)) ?? []) as KeywordInsight[];
+  const parsedTotal = Number(
+    (response as { count?: number | string | null }).count,
+  );
+  return {
+    keywords: rows,
+    totalCount: Number.isFinite(parsedTotal) ? parsedTotal : rows.length,
+  };
+}
+
 export async function executeKeywordInsightsQuery(
   supabase: any,
   options: KeywordInsightsQueryOptions = {},
 ): Promise<KeywordInsightsResult> {
+  const hot = hotKeywordInsightsShape(options);
+  if (hot) {
+    const summary = await executeHotKeywordInsightsQuery(
+      supabase,
+      hot,
+      options.limit,
+    );
+    // An empty summary means the background refresh has not backfilled yet;
+    // fall through to the live RPC rather than serving an empty cloud.
+    if (summary.keywords.length) {
+      return summary;
+    }
+  }
   const limit = normalizeInsightsLimit(options.limit);
   const response = await supabase.rpc("get_filtered_keyword_insights", {
     p_providers: arrayOption(options.providers, options.provider),
