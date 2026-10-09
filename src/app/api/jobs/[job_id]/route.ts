@@ -17,8 +17,13 @@ export async function GET(
     if (!job_id) {
       return NextResponse.json({ error: "Job ID is required" }, { status: 400 });
     }
-    const archetype = new URL(request.url).searchParams.get("archetype") ?? undefined;
-    const job = await getJobById(job_id, archetype);
+    const archetypes = new URL(request.url).searchParams
+      .getAll("archetype")
+      .filter((archetype) => archetype.trim());
+    const job = await getJobById(
+      job_id,
+      archetypes.length ? archetypes : undefined,
+    );
     if (!job) {
       return NextResponse.json({ error: `Job with ID ${job_id} not found` }, { status: 404 });
     }

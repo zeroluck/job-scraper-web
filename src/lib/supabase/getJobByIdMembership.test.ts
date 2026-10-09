@@ -64,6 +64,32 @@ test("details use the explicitly supplied list membership projection", async () 
   }
 });
 
+test("details resolve a membership from any requested archetype", async () => {
+  const mock = clientForDetails();
+  __setSupabaseClientFactoryForTests(async () => mock.client);
+  try {
+    const job = await getJobById("job-1", [
+      "technology_delivery",
+      "network_infrastructure",
+    ]);
+    assert.equal(job?.archetype, "network_infrastructure");
+    assert.deepEqual(mock.rpcCalls, [["get_job_membership_projection_v1", {
+      p_job_ids: ["job-1"],
+      p_archetypes: [
+        "technology_delivery",
+        "software_tpm",
+        "network_infrastructure",
+      ],
+      p_kind: "all",
+      p_filter_status: null,
+      p_min_score: null,
+      p_max_score: null,
+    }]]);
+  } finally {
+    __resetSupabaseClientFactoryForTests();
+  }
+});
+
 test("details do not guess membership without an archetype parameter", async () => {
   const mock = clientForDetails();
   __setSupabaseClientFactoryForTests(async () => mock.client);
