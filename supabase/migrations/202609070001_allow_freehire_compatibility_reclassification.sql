@@ -1,3 +1,5 @@
+-- Mirror of the authoritative copy in job-scraper/supabase_setup/allow_freehire_compatibility_reclassification.sql.
+-- History lives here so web pushes stay ordered; edit the job-scraper file instead.
 -- Allow eligible rows to replace obsolete input hashes under the source snapshot fence.
 BEGIN;
 

@@ -1,3 +1,5 @@
+-- Mirror of the authoritative copy in job-scraper/supabase_setup/fix_linkedin_discovery_status.sql.
+-- History lives here so web pushes stay ordered; edit the job-scraper file instead.
 -- Correct live progress and publication blocker counts.
 BEGIN;
 

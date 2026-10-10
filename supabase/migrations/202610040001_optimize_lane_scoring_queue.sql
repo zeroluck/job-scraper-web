@@ -1,3 +1,5 @@
+-- Mirror of the authoritative copy in job-scraper/supabase_setup/optimize_lane_scoring_queue.sql.
+-- History lives here so web pushes stay ordered; edit the job-scraper file instead.
 BEGIN;
 
 CREATE INDEX IF NOT EXISTS job_archetype_memberships_score_queue_idx

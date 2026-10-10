@@ -1,3 +1,5 @@
+-- Web-owned serving cache; no pipeline code reads this table.
+-- Keep future refresh changes in this web migration chain.
 -- Pre-aggregated serving table for the hot keyword-insights shapes.
 --
 -- The default /insights aggregate (all six lanes + software_tpm alias,

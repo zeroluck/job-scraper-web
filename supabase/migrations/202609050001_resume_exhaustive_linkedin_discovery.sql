@@ -1,3 +1,5 @@
+-- Mirror of the authoritative copy in job-scraper/supabase_setup/resume_exhaustive_linkedin_discovery.sql.
+-- History lives here so web pushes stay ordered; edit the job-scraper file instead.
 -- Forward migration for resumable, terminal-evidence LinkedIn discovery.
 BEGIN;
 

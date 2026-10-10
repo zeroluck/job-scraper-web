@@ -1,3 +1,5 @@
+-- Mirror of the authoritative copy in job-scraper/supabase_setup/drain_sealed_linkedin_discovery.sql.
+-- History lives here so web pushes stay ordered; edit the job-scraper file instead.
 -- Drain canonical work for the latest sealed cycle before starting another search.
 BEGIN;
 

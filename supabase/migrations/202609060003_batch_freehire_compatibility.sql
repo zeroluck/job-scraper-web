@@ -1,3 +1,5 @@
+-- Mirror of the authoritative copy in job-scraper/supabase_setup/batch_freehire_compatibility.sql.
+-- History lives here so web pushes stay ordered; edit the job-scraper file instead.
 -- Batch Freehire compatibility claims and writes to minimize Data API traffic.
 BEGIN;
 
