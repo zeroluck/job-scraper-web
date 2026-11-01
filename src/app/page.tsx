@@ -1,3 +1,6 @@
+// Stateless data clients do not make the route dynamic through cookies.
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import {
   getAllActiveJobsCount,

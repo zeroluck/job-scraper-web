@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/utils/supabase/server";
+import { createSupabaseStorageClient } from "../../utils/supabase/storage.ts";
 
 /**
  * Generates a signed URL for a private file in Supabase Storage.
@@ -13,7 +13,7 @@ export async function getSignedUrl(
   bucket: string = "personalized_resumes",
   expiresIn: number = 3600
 ): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseStorageClient();
 
   const { data, error } = await supabase.storage
     .from(bucket)

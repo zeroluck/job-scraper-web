@@ -1,3 +1,6 @@
+// Stateless data clients do not make the route dynamic through cookies.
+export const dynamic = "force-dynamic";
+
 import CustomPdfViewer from "@/components/CustomPdfViewer";
 import { getCustomizedResumeById } from "@/lib/supabase/queries";
 import { getSignedUrl } from "@/lib/supabase/storage";

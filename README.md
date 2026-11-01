@@ -27,7 +27,7 @@ Each enabled lane displays independent resume readiness. `Resume ready` means an
 
 The `/config` page manages the database-backed career lanes and scrape settings without application authentication. This is an intentional convenience for the current trusted-LAN deployment: anyone who can reach the web app can read and change scraper configuration. Keep the app behind a host firewall or reverse-proxy network allowlist, validate the public host at the proxy, and restore authentication before exposing it beyond the trusted LAN. Configuration writes reject cross-origin browser requests and require JSON, but network isolation remains the primary access boundary.
 
-`SUPABASE_SERVICE_ROLE_KEY` must remain server-only. The scraper reads configuration through the service-role-only `get_scraper_configuration()` RPC and records query provenance through the service-role-only `record_job_archetype_membership(...)` RPC; browser code never receives that key. Apply migrations through the normal deployment workflow before opening `/config`.
+Database access uses server-only `JOB_DATA_API_URL` / `JOB_DATA_API_TOKEN`; the latter must retain the reviewed `job_web` permissions, not a source service-role token. `SUPABASE_SERVICE_ROLE_KEY` remains server-only and is used only for legacy Supabase Storage. See [database / Storage runtime configuration and cutover notes](DATA_STORAGE_CUTOVER.md) for the full consumer inventory and Node CA startup requirements.
 
 ## Tech Stack
 
@@ -44,7 +44,7 @@ The `/config` page manages the database-backed career lanes and scrape settings 
 
 ## Getting Started
 
-Use the backend setup below, then configure this app with the same Supabase project. After installation, an administrator can manage the entire search strategy at `/config`.
+Use the backend setup below, then configure this app with the data API and the separate original Supabase Storage project. The `/config` page remains restricted by the trusted-LAN boundary.
 
 ### Quick start
 
@@ -56,9 +56,12 @@ npm run dev
 Add these values to `.env.local` before starting:
 
 ```bash
+JOB_DATA_API_URL=https://data.example.test
+JOB_DATA_API_TOKEN=your-least-privileged-job-web-token
+# Legacy Supabase project remains Storage-only:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_SERVICE_ROLE_KEY=your-legacy-storage-service-role-key
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` is server-only. Never prefix it with `NEXT_PUBLIC_`. Apply `supabase/migrations` in order through the normal Supabase deployment workflow before opening `/config`.
@@ -110,9 +113,11 @@ npm run build
 3.  **Set up environment variables:**
     Create a `.env.local` file in the root of your project and add the necessary Supabase credentials:
     ```env
-    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+    JOB_DATA_API_URL=https://data.example.test
+    JOB_DATA_API_TOKEN=your_job_web_data_token
+    NEXT_PUBLIC_SUPABASE_URL=your_original_storage_supabase_url
     NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+    SUPABASE_SERVICE_ROLE_KEY=your_legacy_storage_service_role_key
     ```
 
 ### Running the Development Server

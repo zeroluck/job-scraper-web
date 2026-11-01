@@ -1,3 +1,6 @@
+// Stateless data clients do not make the route dynamic through cookies.
+export const dynamic = "force-dynamic";
+
 import { getJobById, getJobKeywordInsights } from "@/lib/supabase/queries";
 import { notFound } from "next/navigation";
 import JobDetailsClient from "@/components/jobs/JobDetailsClient"; // Import the new client component

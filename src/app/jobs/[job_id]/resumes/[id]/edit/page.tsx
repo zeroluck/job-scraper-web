@@ -1,3 +1,6 @@
+// Stateless data clients do not make the route dynamic through cookies.
+export const dynamic = "force-dynamic";
+
 import ResumeEditClient from "@/components/resume/ResumeEditClient";
 import { getCustomizedResumeById } from "@/lib/supabase/queries";
 import { Resume } from "@/types";
