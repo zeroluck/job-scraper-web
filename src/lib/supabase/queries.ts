@@ -1741,7 +1741,8 @@ export async function uploadPersonalizedResume(
   fileName: string,
   file: File,
 ): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const { createSupabaseStorageClient } = await import("../../utils/supabase/storage.ts");
+  const supabase = await createSupabaseStorageClient();
   const filePath = fileName;
 
   console.log("Uploading file to path:", filePath);
